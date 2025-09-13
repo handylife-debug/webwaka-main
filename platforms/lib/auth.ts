@@ -1,5 +1,5 @@
-// Simple authentication and authorization system for SuperAdmin
-// In a real application, this would integrate with NextAuth.js or similar
+// Client-safe authentication and authorization utilities
+// Server-side authentication is handled in auth-server.ts
 
 export type UserRole = 'SuperAdmin' | 'Admin' | 'User';
 
@@ -40,26 +40,36 @@ export function hasRequiredRole(user: User | null, requiredRole: UserRole): bool
   return roleHierarchy[user.role] >= roleHierarchy[requiredRole];
 }
 
-export function getCurrentUser(): User | null {
-  // Mock current user - in real app, get from session/cookies
-  // For demo purposes, return SuperAdmin user
-  if (typeof window !== 'undefined') {
+// Client-side authentication check (for components that can't use async)
+export function getCurrentUserSync(): User | null {
+  if (typeof window === 'undefined') {
+    // Server-side: always return null for security
+    return null;
+  }
+  
+  // Client-side: check localStorage as fallback
+  try {
     const storedUser = localStorage.getItem('currentUser');
     if (storedUser) {
       return JSON.parse(storedUser);
     }
+  } catch (error) {
+    console.error('Error parsing stored user:', error);
   }
   
-  // Default to SuperAdmin for development
-  return mockUsers['superadmin@example.com'];
+  return null;
 }
 
 export function setCurrentUser(user: User | null): void {
   if (typeof window !== 'undefined') {
     if (user) {
       localStorage.setItem('currentUser', JSON.stringify(user));
+      // Set auth cookie for server-side authentication
+      document.cookie = `auth_token=superadmin_token_123; path=/; max-age=86400; SameSite=Strict`;
     } else {
       localStorage.removeItem('currentUser');
+      // Clear auth cookie
+      document.cookie = 'auth_token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT';
     }
   }
 }

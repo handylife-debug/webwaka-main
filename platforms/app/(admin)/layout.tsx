@@ -1,4 +1,5 @@
-import { getCurrentUser, hasRequiredRole } from '@/lib/auth';
+import { getCurrentUser } from '@/lib/auth-server';
+import { hasRequiredRole } from '@/lib/auth';
 import { redirect } from 'next/navigation';
 import { AdminSidebar } from '@/components/admin/sidebar';
 import { AdminHeader } from '@/components/admin/header';
@@ -7,9 +8,9 @@ interface AdminLayoutProps {
   children: React.ReactNode;
 }
 
-export default function AdminLayout({ children }: AdminLayoutProps) {
+export default async function AdminLayout({ children }: AdminLayoutProps) {
   // Check SuperAdmin role authorization
-  const user = getCurrentUser();
+  const user = await getCurrentUser();
   if (!hasRequiredRole(user, 'SuperAdmin')) {
     redirect('/');
   }

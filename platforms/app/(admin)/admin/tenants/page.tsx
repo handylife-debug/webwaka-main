@@ -12,7 +12,16 @@ export const metadata: Metadata = {
 };
 
 export default async function TenantsPage() {
-  const tenants = await getAllSubdomains();
+  let tenants: Awaited<ReturnType<typeof getAllSubdomains>> = [];
+  let error: string | null = null;
+
+  try {
+    tenants = await getAllSubdomains();
+  } catch (err) {
+    console.error('Error fetching tenants:', err);
+    error = 'Failed to load tenant data. Please check your database connection.';
+    tenants = [];
+  }
 
   return (
     <div className="space-y-6">
@@ -31,6 +40,18 @@ export default async function TenantsPage() {
           </Button>
         </Link>
       </div>
+
+      {/* Error Alert */}
+      {error && (
+        <div className="bg-red-50 border border-red-200 text-red-800 px-4 py-3 rounded-lg mb-6">
+          <div className="flex">
+            <div className="ml-3">
+              <h3 className="text-sm font-medium">Database Error</h3>
+              <div className="text-sm mt-1">{error}</div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Stats */}
       <div className="grid gap-4 md:grid-cols-3">

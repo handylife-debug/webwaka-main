@@ -11,7 +11,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { Input } from '@/components/ui/input';
-import { getCurrentUser, logout } from '@/lib/auth';
+import { getCurrentUserSync, logout } from '@/lib/auth';
 import { useRouter } from 'next/navigation';
 import { rootDomain } from '@/lib/utils';
 
@@ -21,7 +21,7 @@ interface AdminHeaderProps {
 
 export function AdminHeader({ title = 'Dashboard' }: AdminHeaderProps) {
   const router = useRouter();
-  const user = getCurrentUser();
+  const user = getCurrentUserSync();
 
   const handleLogout = () => {
     logout();
