@@ -56,6 +56,13 @@ export async function middleware(request: NextRequest) {
     }
   }
 
+  // SuperAdmin route protection - check if trying to access admin routes
+  if (pathname.startsWith('/admin') && !subdomain) {
+    // In a real app, you'd check session/JWT here
+    // For now, we'll let the layout component handle the redirect
+    // This is where you'd implement proper server-side auth checking
+  }
+
   // On the root domain, allow normal access
   return NextResponse.next();
 }
