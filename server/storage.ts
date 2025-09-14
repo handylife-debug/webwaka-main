@@ -36,7 +36,7 @@ import {
   PRODUCT_SERIAL_NUMBERS_TABLE_SQL,
   LOW_STOCK_ALERTS_TABLE_SQL,
   VERIFY_INVENTORY_BUSINESS_LOGIC_FUNCTION_SQL
-} from '../platforms/lib/schema';
+} from '../shared/schema';
 
 // Import the database connection utility
 import { execute_sql, withTransaction } from '../platforms/lib/database';

@@ -198,9 +198,8 @@ const nextConfig: NextConfig = {
   experimental: {
     // Enable experimental features if needed
   },
-  // Configure for Replit environment
-  hostname: '0.0.0.0',
-  allowedHosts: ['*'],
+  // Configure for Replit environment - allow all dev origins
+  allowedDevOrigins: ['*'],
   // Ensure proper handling of Vercel Analytics and Speed Insights
   headers: async () => {
     return [
