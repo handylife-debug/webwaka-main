@@ -1,7 +1,7 @@
-'use server';
+"use server";
 
-import { execute_sql, withTransaction } from '@/lib/database';
-import { headers } from 'next/headers';
+import { execute_sql, withTransaction } from "@/lib/database";
+import { headers } from "next/headers";
 // Note: Import issue with schema file, defining inline for now
 
 export interface PartnerLevel {
@@ -59,7 +59,7 @@ export interface UpdatePartnerLevelData {
   updatedBy?: string;
 }
 
-export type PartnerLevelStatus = 'active' | 'inactive' | 'archived';
+export type PartnerLevelStatus = "active" | "inactive" | "archived";
 
 export interface PartnerApplication {
   id: string;
@@ -138,7 +138,7 @@ export interface TransactionData {
   customer_partner_id?: string; // The partner who referred the customer
   customer_email?: string;
   transaction_amount: number;
-  transaction_type: 'payment' | 'signup' | 'recurring' | 'bonus';
+  transaction_type: "payment" | "signup" | "recurring" | "bonus";
   transaction_date: Date;
   metadata?: Record<string, any>;
 }
@@ -171,7 +171,45 @@ export interface UpdatePartnerApplicationData {
   rejection_reason?: string;
 }
 
-export type PartnerApplicationStatus = 'pending' | 'approved' | 'rejected' | 'withdrawn';
+export type PartnerApplicationStatus =
+  | "pending"
+  | "approved"
+  | "rejected"
+  | "withdrawn";
+
+// Payout Request Interfaces
+export interface PayoutRequest {
+  id: string;
+  tenant_id: string;
+  partner_id: string;
+  partner_code: string;
+  requested_amount: number;
+  payable_balance_at_request: number;
+  request_status: string;
+  request_date: string;
+  reviewed_date?: string;
+  reviewed_by?: string;
+  approval_notes?: string;
+  rejection_reason?: string;
+  payment_method?: string;
+  payment_details?: Record<string, any>;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CreatePayoutRequestData {
+  partner_id: string;
+  requested_amount: number;
+  payment_method?: string;
+  payment_details?: Record<string, any>;
+}
+
+export type PayoutRequestStatus =
+  | "pending"
+  | "approved"
+  | "rejected"
+  | "paid"
+  | "cancelled";
 
 /**
  * Initialize partner tables if they don't exist
@@ -180,7 +218,7 @@ export async function initializePartnerTables(): Promise<void> {
   try {
     // Ensure pgcrypto extension is available for UUID generation
     await execute_sql(`CREATE EXTENSION IF NOT EXISTS pgcrypto;`);
-    
+
     // Create tenants table FIRST (other tables depend on it)
     await execute_sql(`
       CREATE TABLE IF NOT EXISTS tenants (
@@ -194,7 +232,7 @@ export async function initializePartnerTables(): Promise<void> {
         updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
       );
     `);
-    
+
     // Check if partner_levels table has max_referral_depth column
     const columnExists = await execute_sql(`
       SELECT column_name 
@@ -202,7 +240,7 @@ export async function initializePartnerTables(): Promise<void> {
       WHERE table_name = 'partner_levels' 
       AND column_name = 'max_referral_depth';
     `);
-    
+
     // Add max_referral_depth column if it doesn't exist
     if (columnExists.rows.length === 0) {
       await execute_sql(`
@@ -210,7 +248,7 @@ export async function initializePartnerTables(): Promise<void> {
         ADD COLUMN IF NOT EXISTS max_referral_depth INTEGER DEFAULT 1;
       `);
     }
-    
+
     // Create partner_applications table (inline for now due to import issues)
     await execute_sql(`
       CREATE TABLE IF NOT EXISTS partner_applications (
@@ -246,27 +284,67 @@ export async function initializePartnerTables(): Promise<void> {
         CONSTRAINT check_reviewed_date_after_application CHECK (reviewed_date IS NULL OR reviewed_date >= application_date)
       );
     `);
-    
+
     // Import and use the enhanced schema from shared/schema.ts for security
-    const { 
-      PARTNER_COMMISSIONS_TABLE_SQL, 
-      PARTNER_COMMISSIONS_INDEXES_SQL, 
-      PARTNER_COMMISSIONS_TRIGGERS_SQL 
-    } = await import('../../shared/schema');
-    
+    const {
+      PARTNER_COMMISSIONS_TABLE_SQL,
+      PARTNER_COMMISSIONS_INDEXES_SQL,
+      PARTNER_COMMISSIONS_TRIGGERS_SQL,
+    } = await import("../../shared/schema");
+
     // Create partner_commissions table with enhanced security constraints
     await execute_sql(PARTNER_COMMISSIONS_TABLE_SQL);
-    
+
     // Create performance indexes for multi-tenant optimization
     await execute_sql(PARTNER_COMMISSIONS_INDEXES_SQL);
-    
+
     // Create triggers for automatic timestamp updates
     await execute_sql(PARTNER_COMMISSIONS_TRIGGERS_SQL);
-    
-    console.log('Partner tables initialized successfully');
+
+    // Create payout_requests table
+    await execute_sql(`
+      CREATE TABLE IF NOT EXISTS payout_requests (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        tenant_id UUID NOT NULL,
+        partner_id UUID NOT NULL,
+        partner_code VARCHAR(50) NOT NULL,
+        requested_amount DECIMAL(10,2) NOT NULL CHECK (requested_amount > 0),
+        payable_balance_at_request DECIMAL(10,2) NOT NULL,
+        request_status VARCHAR(20) DEFAULT 'pending' CHECK (request_status IN ('pending', 'approved', 'rejected', 'paid', 'cancelled')),
+        request_date TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+        reviewed_date TIMESTAMP WITH TIME ZONE,
+        reviewed_by UUID,
+        approval_notes TEXT,
+        rejection_reason TEXT,
+        payment_method VARCHAR(50),
+        payment_details JSONB DEFAULT '{}'::jsonb,
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+        
+        -- Multi-tenant constraints
+        CONSTRAINT fk_payout_requests_tenant FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
+        CONSTRAINT unique_pending_request_per_partner UNIQUE (tenant_id, partner_id, request_status) DEFERRABLE INITIALLY DEFERRED,
+        CONSTRAINT check_request_amount_valid CHECK (requested_amount <= payable_balance_at_request),
+        CONSTRAINT check_reviewed_date_after_request CHECK (reviewed_date IS NULL OR reviewed_date >= request_date)
+      );
+    `);
+
+    // Create indexes for payout_requests
+    await execute_sql(`
+      CREATE INDEX IF NOT EXISTS idx_payout_requests_tenant_partner 
+      ON payout_requests(tenant_id, partner_id);
+      
+      CREATE INDEX IF NOT EXISTS idx_payout_requests_status 
+      ON payout_requests(tenant_id, request_status);
+      
+      CREATE INDEX IF NOT EXISTS idx_payout_requests_date 
+      ON payout_requests(tenant_id, request_date DESC);
+    `);
+
+    console.log("Partner tables initialized successfully");
   } catch (error) {
-    console.error('Error initializing partner tables:', error);
-    throw new Error('Failed to initialize partner tables');
+    console.error("Error initializing partner tables:", error);
+    throw new Error("Failed to initialize partner tables");
   }
 }
 
@@ -297,7 +375,7 @@ export async function getAllPartnerLevels(): Promise<PartnerLevel[]> {
       max_referral_depth: parseInt(row.max_referral_depth) || 1,
     }));
   } catch (error) {
-    console.error('Error fetching partner levels:', error);
+    console.error("Error fetching partner levels:", error);
     return [];
   }
 }
@@ -305,9 +383,12 @@ export async function getAllPartnerLevels(): Promise<PartnerLevel[]> {
 /**
  * Get a specific partner level by ID
  */
-export async function getPartnerLevel(levelId: string): Promise<PartnerLevel | null> {
+export async function getPartnerLevel(
+  levelId: string,
+): Promise<PartnerLevel | null> {
   try {
-    const result = await execute_sql(`
+    const result = await execute_sql(
+      `
       SELECT 
         id, level_name, level_code, description,
         default_commission_rate, min_commission_rate, max_commission_rate,
@@ -316,7 +397,9 @@ export async function getPartnerLevel(levelId: string): Promise<PartnerLevel | n
         created_at, updated_at, created_by
       FROM partner_levels 
       WHERE id = $1;
-    `, [levelId]);
+    `,
+      [levelId],
+    );
 
     if (result.rows.length === 0) return null;
 
@@ -332,7 +415,7 @@ export async function getPartnerLevel(levelId: string): Promise<PartnerLevel | n
       max_referral_depth: parseInt(row.max_referral_depth) || 1,
     };
   } catch (error) {
-    console.error('Error fetching partner level:', error);
+    console.error("Error fetching partner level:", error);
     return null;
   }
 }
@@ -340,9 +423,12 @@ export async function getPartnerLevel(levelId: string): Promise<PartnerLevel | n
 /**
  * Create a new partner level
  */
-export async function createPartnerLevel(levelData: CreatePartnerLevelData): Promise<string> {
+export async function createPartnerLevel(
+  levelData: CreatePartnerLevelData,
+): Promise<string> {
   try {
-    const result = await execute_sql(`
+    const result = await execute_sql(
+      `
       INSERT INTO partner_levels (
         level_name, level_code, description, default_commission_rate,
         min_commission_rate, max_commission_rate,
@@ -351,48 +437,53 @@ export async function createPartnerLevel(levelData: CreatePartnerLevelData): Pro
         created_by
       ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
       RETURNING id;
-    `, [
-      levelData.level_name,
-      levelData.level_code,
-      levelData.description || null,
-      levelData.default_commission_rate,
-      levelData.min_commission_rate || 0.0000,
-      levelData.max_commission_rate || 1.0000,
-      levelData.min_downline_count || 0,
-      levelData.min_volume_requirement || 0.00,
-      JSON.stringify(levelData.benefits || []),
-      JSON.stringify(levelData.requirements || []),
-      levelData.level_order,
-      levelData.status || 'active',
-      levelData.max_referral_depth,
-      levelData.createdBy
-    ]);
+    `,
+      [
+        levelData.level_name,
+        levelData.level_code,
+        levelData.description || null,
+        levelData.default_commission_rate,
+        levelData.min_commission_rate || 0.0,
+        levelData.max_commission_rate || 1.0,
+        levelData.min_downline_count || 0,
+        levelData.min_volume_requirement || 0.0,
+        JSON.stringify(levelData.benefits || []),
+        JSON.stringify(levelData.requirements || []),
+        levelData.level_order,
+        levelData.status || "active",
+        levelData.max_referral_depth,
+        levelData.createdBy,
+      ],
+    );
 
     return result.rows[0].id;
   } catch (error: any) {
-    console.error('Error creating partner level:', error);
-    
+    console.error("Error creating partner level:", error);
+
     // Handle unique constraint violations
-    if (error.code === '23505') {
-      if (error.constraint?.includes('level_name')) {
-        throw new Error('A partner level with this name already exists');
+    if (error.code === "23505") {
+      if (error.constraint?.includes("level_name")) {
+        throw new Error("A partner level with this name already exists");
       }
-      if (error.constraint?.includes('level_code')) {
-        throw new Error('A partner level with this code already exists');
+      if (error.constraint?.includes("level_code")) {
+        throw new Error("A partner level with this code already exists");
       }
-      if (error.constraint?.includes('level_order')) {
-        throw new Error('A partner level with this order already exists');
+      if (error.constraint?.includes("level_order")) {
+        throw new Error("A partner level with this order already exists");
       }
     }
-    
-    throw new Error('Failed to create partner level');
+
+    throw new Error("Failed to create partner level");
   }
 }
 
 /**
  * Update an existing partner level
  */
-export async function updatePartnerLevel(levelId: string, updates: UpdatePartnerLevelData): Promise<boolean> {
+export async function updatePartnerLevel(
+  levelId: string,
+  updates: UpdatePartnerLevelData,
+): Promise<boolean> {
   try {
     const setClauses: string[] = [];
     const values: any[] = [];
@@ -460,28 +551,28 @@ export async function updatePartnerLevel(levelId: string, updates: UpdatePartner
 
     const query = `
       UPDATE partner_levels 
-      SET ${setClauses.join(', ')}
+      SET ${setClauses.join(", ")}
       WHERE id = $${paramCounter};
     `;
 
     await execute_sql(query, values);
     return true;
   } catch (error: any) {
-    console.error('Error updating partner level:', error);
-    
+    console.error("Error updating partner level:", error);
+
     // Handle unique constraint violations
-    if (error.code === '23505') {
-      if (error.constraint?.includes('level_name')) {
-        throw new Error('A partner level with this name already exists');
+    if (error.code === "23505") {
+      if (error.constraint?.includes("level_name")) {
+        throw new Error("A partner level with this name already exists");
       }
-      if (error.constraint?.includes('level_code')) {
-        throw new Error('A partner level with this code already exists');
+      if (error.constraint?.includes("level_code")) {
+        throw new Error("A partner level with this code already exists");
       }
-      if (error.constraint?.includes('level_order')) {
-        throw new Error('A partner level with this order already exists');
+      if (error.constraint?.includes("level_order")) {
+        throw new Error("A partner level with this order already exists");
       }
     }
-    
+
     return false;
   }
 }
@@ -491,20 +582,25 @@ export async function updatePartnerLevel(levelId: string, updates: UpdatePartner
  */
 export async function deletePartnerLevel(levelId: string): Promise<boolean> {
   try {
-    const result = await execute_sql(`
+    const result = await execute_sql(
+      `
       DELETE FROM partner_levels 
       WHERE id = $1;
-    `, [levelId]);
+    `,
+      [levelId],
+    );
 
     return result.rowCount > 0;
   } catch (error: any) {
-    console.error('Error deleting partner level:', error);
-    
+    console.error("Error deleting partner level:", error);
+
     // Handle foreign key constraint violations
-    if (error.code === '23503') {
-      throw new Error('Cannot delete partner level - it is being used by existing partners');
+    if (error.code === "23503") {
+      throw new Error(
+        "Cannot delete partner level - it is being used by existing partners",
+      );
     }
-    
+
     return false;
   }
 }
@@ -512,17 +608,23 @@ export async function deletePartnerLevel(levelId: string): Promise<boolean> {
 /**
  * Update partner level status
  */
-export async function updatePartnerLevelStatus(levelId: string, status: PartnerLevelStatus): Promise<boolean> {
+export async function updatePartnerLevelStatus(
+  levelId: string,
+  status: PartnerLevelStatus,
+): Promise<boolean> {
   try {
-    const result = await execute_sql(`
+    const result = await execute_sql(
+      `
       UPDATE partner_levels 
       SET status = $1, updated_at = CURRENT_TIMESTAMP
       WHERE id = $2;
-    `, [status, levelId]);
+    `,
+      [status, levelId],
+    );
 
     return result.rowCount > 0;
   } catch (error) {
-    console.error('Error updating partner level status:', error);
+    console.error("Error updating partner level status:", error);
     return false;
   }
 }
@@ -551,7 +653,7 @@ export async function getPartnerLevelStats(): Promise<{
       inactive: parseInt(stats.inactive) || 0,
     };
   } catch (error) {
-    console.error('Error fetching partner level stats:', error);
+    console.error("Error fetching partner level stats:", error);
     return { total: 0, active: 0, inactive: 0 };
   }
 }
@@ -562,24 +664,24 @@ export async function getPartnerLevelStats(): Promise<{
 async function getCurrentSubdomain(): Promise<string | null> {
   try {
     const headersList = await headers();
-    const host = headersList.get('host') || '';
-    const hostname = host.split(':')[0];
+    const host = headersList.get("host") || "";
+    const hostname = host.split(":")[0];
 
     // Local development environment
-    if (hostname.includes('localhost') || hostname.includes('127.0.0.1')) {
-      if (hostname.includes('.localhost')) {
-        return hostname.split('.')[0];
+    if (hostname.includes("localhost") || hostname.includes("127.0.0.1")) {
+      if (hostname.includes(".localhost")) {
+        return hostname.split(".")[0];
       }
       return null;
     }
 
     // Production environment - extract subdomain
-    const rootDomain = process.env.NEXT_PUBLIC_ROOT_DOMAIN || 'example.com';
-    const rootDomainFormatted = rootDomain.split(':')[0];
+    const rootDomain = process.env.NEXT_PUBLIC_ROOT_DOMAIN || "example.com";
+    const rootDomainFormatted = rootDomain.split(":")[0];
 
     // Handle preview deployment URLs (tenant---branch-name.vercel.app)
-    if (hostname.includes('---') && hostname.endsWith('.vercel.app')) {
-      const parts = hostname.split('---');
+    if (hostname.includes("---") && hostname.endsWith(".vercel.app")) {
+      const parts = hostname.split("---");
       return parts.length > 0 ? parts[0] : null;
     }
 
@@ -589,9 +691,9 @@ async function getCurrentSubdomain(): Promise<string | null> {
       hostname !== `www.${rootDomainFormatted}` &&
       hostname.endsWith(`.${rootDomainFormatted}`);
 
-    return isSubdomain ? hostname.replace(`.${rootDomainFormatted}`, '') : null;
+    return isSubdomain ? hostname.replace(`.${rootDomainFormatted}`, "") : null;
   } catch (error) {
-    console.error('Error extracting subdomain:', error);
+    console.error("Error extracting subdomain:", error);
     return null;
   }
 }
@@ -604,7 +706,7 @@ async function getOrCreateTenant(subdomain: string): Promise<string | null> {
     // First, try to get existing tenant
     const existingTenant = await execute_sql(
       `SELECT id FROM tenants WHERE subdomain = $1`,
-      [subdomain]
+      [subdomain],
     );
 
     if (existingTenant.rows.length > 0) {
@@ -614,12 +716,12 @@ async function getOrCreateTenant(subdomain: string): Promise<string | null> {
     // Create new tenant if doesn't exist
     const newTenant = await execute_sql(
       `INSERT INTO tenants (subdomain, tenant_name) VALUES ($1, $2) RETURNING id`,
-      [subdomain, subdomain] // Use subdomain as tenant_name for now
+      [subdomain, subdomain], // Use subdomain as tenant_name for now
     );
 
     return newTenant.rows[0]?.id || null;
   } catch (error) {
-    console.error('Error getting or creating tenant:', error);
+    console.error("Error getting or creating tenant:", error);
     return null;
   }
 }
@@ -630,14 +732,14 @@ async function getOrCreateTenant(subdomain: string): Promise<string | null> {
  */
 async function getCurrentTenantId(): Promise<string | null> {
   // Support for testing - allow mocking the current tenant ID
-  if (typeof global !== 'undefined' && (global as any).mockCurrentTenantId) {
+  if (typeof global !== "undefined" && (global as any).mockCurrentTenantId) {
     return (global as any).mockCurrentTenantId;
   }
-  
+
   const subdomain = await getCurrentSubdomain();
   if (!subdomain) {
     // For main domain requests, use a default tenant
-    return await getOrCreateTenant('main');
+    return await getOrCreateTenant("main");
   }
 
   return await getOrCreateTenant(subdomain);
@@ -646,22 +748,27 @@ async function getCurrentTenantId(): Promise<string | null> {
 /**
  * Get partner record by user ID
  */
-export async function getPartnerByUserId(userId: string): Promise<string | null> {
+export async function getPartnerByUserId(
+  userId: string,
+): Promise<string | null> {
   try {
     const tenantId = await getCurrentTenantId();
     if (!tenantId) {
-      throw new Error('Unable to determine tenant context');
+      throw new Error("Unable to determine tenant context");
     }
 
-    const result = await execute_sql(`
+    const result = await execute_sql(
+      `
       SELECT id FROM partners 
       WHERE tenant_id = $1 AND user_id = $2 AND status = 'active'
       LIMIT 1;
-    `, [tenantId, userId]);
+    `,
+      [tenantId, userId],
+    );
 
     return result.rows.length > 0 ? result.rows[0].id : null;
   } catch (error) {
-    console.error('Error fetching partner by user ID:', error);
+    console.error("Error fetching partner by user ID:", error);
     return null;
   }
 }
@@ -673,18 +780,21 @@ export async function getPartnerByEmail(email: string): Promise<string | null> {
   try {
     const tenantId = await getCurrentTenantId();
     if (!tenantId) {
-      throw new Error('Unable to determine tenant context');
+      throw new Error("Unable to determine tenant context");
     }
 
-    const result = await execute_sql(`
+    const result = await execute_sql(
+      `
       SELECT id FROM partners 
       WHERE tenant_id = $1 AND email = $2 AND status = 'active'
       LIMIT 1;
-    `, [tenantId, email]);
+    `,
+      [tenantId, email],
+    );
 
     return result.rows.length > 0 ? result.rows[0].id : null;
   } catch (error) {
-    console.error('Error fetching partner by email:', error);
+    console.error("Error fetching partner by email:", error);
     return null;
   }
 }
@@ -692,15 +802,18 @@ export async function getPartnerByEmail(email: string): Promise<string | null> {
 /**
  * Create a new partner application
  */
-export async function createPartnerApplication(applicationData: CreatePartnerApplicationData): Promise<string | null> {
+export async function createPartnerApplication(
+  applicationData: CreatePartnerApplicationData,
+): Promise<string | null> {
   try {
     // Get the current tenant ID from request context
     const tenantId = await getCurrentTenantId();
     if (!tenantId) {
-      throw new Error('Unable to determine tenant context');
+      throw new Error("Unable to determine tenant context");
     }
-    
-    const result = await execute_sql(`
+
+    const result = await execute_sql(
+      `
       INSERT INTO partner_applications (
         tenant_id, email, first_name, last_name, phone, company_name, 
         company_website, experience_level, marketing_experience, why_partner, 
@@ -708,33 +821,35 @@ export async function createPartnerApplication(applicationData: CreatePartnerApp
       )
       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
       RETURNING id;
-    `, [
-      tenantId, // Use actual tenant context
-      applicationData.email,
-      applicationData.first_name,
-      applicationData.last_name,
-      applicationData.phone || null,
-      applicationData.company_name || null,
-      applicationData.company_website || null,
-      applicationData.experience_level || null,
-      applicationData.marketing_experience || null,
-      applicationData.why_partner || null,
-      applicationData.referral_methods || null,
-      applicationData.sponsor_email || null,
-      applicationData.requested_partner_level_id || null,
-    ]);
+    `,
+      [
+        tenantId, // Use actual tenant context
+        applicationData.email,
+        applicationData.first_name,
+        applicationData.last_name,
+        applicationData.phone || null,
+        applicationData.company_name || null,
+        applicationData.company_website || null,
+        applicationData.experience_level || null,
+        applicationData.marketing_experience || null,
+        applicationData.why_partner || null,
+        applicationData.referral_methods || null,
+        applicationData.sponsor_email || null,
+        applicationData.requested_partner_level_id || null,
+      ],
+    );
 
     return result.rows[0]?.id || null;
   } catch (error: any) {
-    console.error('Error creating partner application:', error);
-    
+    console.error("Error creating partner application:", error);
+
     // Handle unique constraint violations
-    if (error.code === '23505') {
-      if (error.constraint?.includes('email')) {
-        throw new Error('An application with this email already exists');
+    if (error.code === "23505") {
+      if (error.constraint?.includes("email")) {
+        throw new Error("An application with this email already exists");
       }
     }
-    
+
     return null;
   }
 }
@@ -742,7 +857,9 @@ export async function createPartnerApplication(applicationData: CreatePartnerApp
 /**
  * Get all partner applications
  */
-export async function getAllPartnerApplications(): Promise<PartnerApplication[]> {
+export async function getAllPartnerApplications(): Promise<
+  PartnerApplication[]
+> {
   try {
     const result = await execute_sql(`
       SELECT 
@@ -760,7 +877,7 @@ export async function getAllPartnerApplications(): Promise<PartnerApplication[]>
       metadata: row.metadata || {},
     }));
   } catch (error) {
-    console.error('Error fetching partner applications:', error);
+    console.error("Error fetching partner applications:", error);
     return [];
   }
 }
@@ -768,7 +885,9 @@ export async function getAllPartnerApplications(): Promise<PartnerApplication[]>
 /**
  * Get pending partner applications
  */
-export async function getPendingPartnerApplications(): Promise<PartnerApplication[]> {
+export async function getPendingPartnerApplications(): Promise<
+  PartnerApplication[]
+> {
   try {
     const result = await execute_sql(`
       SELECT 
@@ -787,7 +906,7 @@ export async function getPendingPartnerApplications(): Promise<PartnerApplicatio
       metadata: row.metadata || {},
     }));
   } catch (error) {
-    console.error('Error fetching pending partner applications:', error);
+    console.error("Error fetching pending partner applications:", error);
     return [];
   }
 }
@@ -795,9 +914,12 @@ export async function getPendingPartnerApplications(): Promise<PartnerApplicatio
 /**
  * Get a specific partner application by ID
  */
-export async function getPartnerApplication(applicationId: string): Promise<PartnerApplication | null> {
+export async function getPartnerApplication(
+  applicationId: string,
+): Promise<PartnerApplication | null> {
   try {
-    const result = await execute_sql(`
+    const result = await execute_sql(
+      `
       SELECT 
         id, tenant_id, email, first_name, last_name, phone, company_name,
         company_website, experience_level, marketing_experience, why_partner,
@@ -806,7 +928,9 @@ export async function getPartnerApplication(applicationId: string): Promise<Part
         approval_notes, rejection_reason, metadata, created_at, updated_at
       FROM partner_applications 
       WHERE id = $1;
-    `, [applicationId]);
+    `,
+      [applicationId],
+    );
 
     if (result.rows.length === 0) {
       return null;
@@ -818,7 +942,7 @@ export async function getPartnerApplication(applicationId: string): Promise<Part
       metadata: row.metadata || {},
     };
   } catch (error) {
-    console.error('Error fetching partner application:', error);
+    console.error("Error fetching partner application:", error);
     return null;
   }
 }
@@ -827,26 +951,29 @@ export async function getPartnerApplication(applicationId: string): Promise<Part
  * Update partner application status (approve/reject)
  */
 export async function updatePartnerApplicationStatus(
-  applicationId: string, 
-  status: PartnerApplicationStatus, 
+  applicationId: string,
+  status: PartnerApplicationStatus,
   reviewedBy: string,
-  notes?: string
+  notes?: string,
 ): Promise<boolean> {
   try {
-    const result = await execute_sql(`
+    const result = await execute_sql(
+      `
       UPDATE partner_applications 
       SET 
         application_status = $1, 
         reviewed_date = CURRENT_DATE,
         reviewed_by = $2,
-        ${status === 'approved' ? 'approval_notes' : 'rejection_reason'} = $3,
+        ${status === "approved" ? "approval_notes" : "rejection_reason"} = $3,
         updated_at = CURRENT_TIMESTAMP
       WHERE id = $4;
-    `, [status, reviewedBy, notes || null, applicationId]);
+    `,
+      [status, reviewedBy, notes || null, applicationId],
+    );
 
     return result.rowCount > 0;
   } catch (error) {
-    console.error('Error updating partner application status:', error);
+    console.error("Error updating partner application status:", error);
     return false;
   }
 }
@@ -878,7 +1005,7 @@ export async function getPartnerApplicationStats(): Promise<{
       rejected: parseInt(stats.rejected) || 0,
     };
   } catch (error) {
-    console.error('Error fetching partner application stats:', error);
+    console.error("Error fetching partner application stats:", error);
     return { total: 0, pending: 0, approved: 0, rejected: 0 };
   }
 }
@@ -890,9 +1017,15 @@ export async function getPartnerApplicationStats(): Promise<{
 /**
  * Get upline partners for commission calculation using recursive traversal
  */
-async function getUplinePartners(client: any, sourcePartnerId: string, tenantId: string, maxDepth: number = 10): Promise<UplinePartner[]> {
+async function getUplinePartners(
+  client: any,
+  sourcePartnerId: string,
+  tenantId: string,
+  maxDepth: number = 10,
+): Promise<UplinePartner[]> {
   try {
-    const result = await client.query(`
+    const result = await client.query(
+      `
       WITH RECURSIVE upline_tree AS (
         -- Base case: the partner who made the sale
         SELECT 
@@ -934,7 +1067,9 @@ async function getUplinePartners(client: any, sourcePartnerId: string, tenantId:
       FROM upline_tree 
       WHERE levels_from_source > 0  -- Exclude the original source
       ORDER BY levels_from_source ASC;
-    `, [sourcePartnerId, tenantId, maxDepth]);
+    `,
+      [sourcePartnerId, tenantId, maxDepth],
+    );
 
     return result.rows.map((row: any) => ({
       partner_id: row.partner_id,
@@ -944,10 +1079,10 @@ async function getUplinePartners(client: any, sourcePartnerId: string, tenantId:
       commission_rate: parseFloat(row.commission_rate) || 0,
       max_referral_depth: parseInt(row.max_referral_depth) || 1,
       levels_from_source: parseInt(row.levels_from_source),
-      relationship_type: row.relationship_type
+      relationship_type: row.relationship_type,
     }));
   } catch (error) {
-    console.error('Error getting upline partners:', error);
+    console.error("Error getting upline partners:", error);
     return [];
   }
 }
@@ -956,10 +1091,13 @@ async function getUplinePartners(client: any, sourcePartnerId: string, tenantId:
  * Calculate commission amount based on transaction amount and commission rate
  * Uses precise decimal arithmetic to avoid floating-point precision errors
  */
-function calculateCommissionAmount(transactionAmount: number, commissionRate: number): number {
+function calculateCommissionAmount(
+  transactionAmount: number,
+  commissionRate: number,
+): number {
   // Use high precision calculation then round to nearest cent
   const commission = transactionAmount * commissionRate;
-  
+
   // Round to nearest cent using banker's rounding for financial accuracy
   return Math.round(commission * 100) / 100;
 }
@@ -967,20 +1105,27 @@ function calculateCommissionAmount(transactionAmount: number, commissionRate: nu
 /**
  * Get partner by ID with level information
  */
-async function getPartnerWithLevel(client: any, partnerId: string, tenantId: string): Promise<any> {
+async function getPartnerWithLevel(
+  client: any,
+  partnerId: string,
+  tenantId: string,
+): Promise<any> {
   try {
-    const result = await client.query(`
+    const result = await client.query(
+      `
       SELECT 
         p.id, p.partner_code, p.partner_level_id,
         pl.level_name, pl.default_commission_rate, pl.max_referral_depth
       FROM partners p
       LEFT JOIN partner_levels pl ON p.partner_level_id = pl.id
       WHERE p.id = $1 AND p.tenant_id = $2;
-    `, [partnerId, tenantId]);
+    `,
+      [partnerId, tenantId],
+    );
 
     return result.rows[0] || null;
   } catch (error) {
-    console.error('Error getting partner with level:', error);
+    console.error("Error getting partner with level:", error);
     return null;
   }
 }
@@ -995,11 +1140,12 @@ async function createCommissionRecord(
   transactionData: TransactionData,
   beneficiaryPartner: UplinePartner,
   sourcePartner: any,
-  commissionAmount: number
-): Promise<{id: string | null, wasCreated: boolean}> {
+  commissionAmount: number,
+): Promise<{ id: string | null; wasCreated: boolean }> {
   try {
     // First try to insert the commission record with ON CONFLICT handling
-    const insertResult = await client.query(`
+    const insertResult = await client.query(
+      `
       INSERT INTO partner_commissions (
         tenant_id, transaction_id, transaction_amount, transaction_type,
         beneficiary_partner_id, beneficiary_partner_code,
@@ -1013,129 +1159,156 @@ async function createCommissionRecord(
       ON CONFLICT (tenant_id, transaction_id, beneficiary_partner_id, levels_from_source) 
       DO NOTHING
       RETURNING id;
-    `, [
-      tenantId,
-      transactionData.transaction_id,
-      transactionData.transaction_amount,
-      transactionData.transaction_type,
-      beneficiaryPartner.partner_id,
-      beneficiaryPartner.partner_code,
-      sourcePartner.id,
-      sourcePartner.partner_code,
-      beneficiaryPartner.levels_from_source, // commission_level = levels from source
-      beneficiaryPartner.levels_from_source,
-      beneficiaryPartner.commission_rate,
-      commissionAmount,
-      beneficiaryPartner.partner_level_id,
-      beneficiaryPartner.partner_level_name,
-      transactionData.transaction_date.toISOString(),
-      '1.0', // commission_engine_version
-      JSON.stringify(transactionData.metadata || {})
-    ]);
+    `,
+      [
+        tenantId,
+        transactionData.transaction_id,
+        transactionData.transaction_amount,
+        transactionData.transaction_type,
+        beneficiaryPartner.partner_id,
+        beneficiaryPartner.partner_code,
+        sourcePartner.id,
+        sourcePartner.partner_code,
+        beneficiaryPartner.levels_from_source, // commission_level = levels from source
+        beneficiaryPartner.levels_from_source,
+        beneficiaryPartner.commission_rate,
+        commissionAmount,
+        beneficiaryPartner.partner_level_id,
+        beneficiaryPartner.partner_level_name,
+        transactionData.transaction_date.toISOString(),
+        "1.0", // commission_engine_version
+        JSON.stringify(transactionData.metadata || {}),
+      ],
+    );
 
     if (insertResult.rows.length > 0) {
       // New record was created
       return { id: insertResult.rows[0].id, wasCreated: true };
     } else {
       // Record already existed, get the existing one
-      const selectResult = await client.query(`
+      const selectResult = await client.query(
+        `
         SELECT id FROM partner_commissions 
         WHERE tenant_id = $1 
           AND transaction_id = $2 
           AND beneficiary_partner_id = $3 
           AND levels_from_source = $4;
-      `, [tenantId, transactionData.transaction_id, beneficiaryPartner.partner_id, beneficiaryPartner.levels_from_source]);
-      
-      return { 
-        id: selectResult.rows[0]?.id || null, 
-        wasCreated: false 
+      `,
+        [
+          tenantId,
+          transactionData.transaction_id,
+          beneficiaryPartner.partner_id,
+          beneficiaryPartner.levels_from_source,
+        ],
+      );
+
+      return {
+        id: selectResult.rows[0]?.id || null,
+        wasCreated: false,
       };
     }
   } catch (error) {
-    console.error('Error creating commission record:', error);
+    console.error("Error creating commission record:", error);
     throw error; // Re-throw to trigger transaction rollback
   }
 }
 
 /**
  * COMMISSION ENGINE "TISSUE" - Main function triggered after successful payments
- * 
+ *
  * This is the core Commission Engine that:
  * 1. Identifies the client's referring partner
- * 2. Calculates commission amounts based on partner tiers  
+ * 2. Calculates commission amounts based on partner tiers
  * 3. Recursively traverses partner_relations tree for upline commissions
  * 4. Stores commission entries in partner_commissions table
- * 
+ *
  * Enhanced with:
  * - Database transaction wrapping for atomicity
  * - Idempotent processing to prevent duplicate commissions on retry
  * - Comprehensive error handling with automatic rollback
  * - Audit trail for regulatory compliance
  */
-export async function processCommissionCalculation(transactionData: TransactionData): Promise<CommissionCalculationResult> {
+export async function processCommissionCalculation(
+  transactionData: TransactionData,
+): Promise<CommissionCalculationResult> {
   const startTime = Date.now();
   const auditLog = {
     transaction_id: transactionData.transaction_id,
     start_time: new Date().toISOString(),
-    tenant_id: '',
-    source_partner_code: '',
+    tenant_id: "",
+    source_partner_code: "",
     upline_partners_processed: 0,
     new_commissions_created: 0,
     existing_commissions_found: 0,
     total_commission_amount: 0,
     errors: [] as string[],
     processing_time_ms: 0,
-    status: 'started'
+    status: "started",
   };
 
   try {
     // Get current tenant ID from request context
     const tenantId = await getCurrentTenantId();
     if (!tenantId) {
-      auditLog.status = 'failed';
-      auditLog.errors.push('Unable to determine tenant context');
-      console.error('Commission calculation audit:', auditLog);
-      
+      auditLog.status = "failed";
+      auditLog.errors.push("Unable to determine tenant context");
+      console.error("Commission calculation audit:", auditLog);
+
       return {
         success: false,
         transaction_id: transactionData.transaction_id,
         total_commissions_calculated: 0,
         total_commission_amount: 0,
         commissions: [],
-        errors: ['Unable to determine tenant context']
+        errors: ["Unable to determine tenant context"],
       };
     }
     auditLog.tenant_id = tenantId;
 
     // Validate transaction data
-    if (!transactionData.customer_partner_id || transactionData.transaction_amount <= 0) {
-      auditLog.status = 'failed';
-      auditLog.errors.push('Invalid transaction data: missing partner ID or invalid amount');
-      console.error('Commission calculation audit:', auditLog);
-      
+    if (
+      !transactionData.customer_partner_id ||
+      transactionData.transaction_amount <= 0
+    ) {
+      auditLog.status = "failed";
+      auditLog.errors.push(
+        "Invalid transaction data: missing partner ID or invalid amount",
+      );
+      console.error("Commission calculation audit:", auditLog);
+
       return {
         success: false,
         transaction_id: transactionData.transaction_id,
         total_commissions_calculated: 0,
         total_commission_amount: 0,
         commissions: [],
-        errors: ['Invalid transaction data: missing partner ID or invalid amount']
+        errors: [
+          "Invalid transaction data: missing partner ID or invalid amount",
+        ],
       };
     }
 
     // Execute the entire commission calculation within a database transaction
     const result = await withTransaction(async (client) => {
       // Get the referring partner (source of the transaction)
-      const sourcePartner = await getPartnerWithLevel(client, transactionData.customer_partner_id, tenantId);
+      const sourcePartner = await getPartnerWithLevel(
+        client,
+        transactionData.customer_partner_id!,
+        tenantId,
+      );
       if (!sourcePartner) {
-        throw new Error('Referring partner not found');
+        throw new Error("Referring partner not found");
       }
       auditLog.source_partner_code = sourcePartner.partner_code;
 
       // Get upline partners for commission calculation
-      const uplinePartners = await getUplinePartners(client, sourcePartner.id, tenantId);
+      const uplinePartners = await getUplinePartners(
+        client,
+        sourcePartner.id,
+        tenantId,
+      );
       auditLog.upline_partners_processed = uplinePartners.length;
-      
+
       const calculatedCommissions: Commission[] = [];
       const errors: string[] = [];
       let totalCommissionAmount = 0;
@@ -1147,8 +1320,8 @@ export async function processCommissionCalculation(transactionData: TransactionD
         try {
           // Calculate commission amount
           const commissionAmount = calculateCommissionAmount(
-            transactionData.transaction_amount, 
-            uplinePartner.commission_rate
+            transactionData.transaction_amount,
+            uplinePartner.commission_rate,
           );
 
           if (commissionAmount > 0) {
@@ -1159,7 +1332,7 @@ export async function processCommissionCalculation(transactionData: TransactionD
               transactionData,
               uplinePartner,
               sourcePartner,
-              commissionAmount
+              commissionAmount,
             );
 
             if (commissionResult.id) {
@@ -1184,25 +1357,33 @@ export async function processCommissionCalculation(transactionData: TransactionD
                 commission_percentage: uplinePartner.commission_rate,
                 commission_amount: commissionAmount,
                 beneficiary_partner_level_id: uplinePartner.partner_level_id,
-                beneficiary_partner_level_name: uplinePartner.partner_level_name,
-                calculation_status: 'calculated',
-                payout_status: 'pending',
-                transaction_date: transactionData.transaction_date.toISOString(),
+                beneficiary_partner_level_name:
+                  uplinePartner.partner_level_name,
+                calculation_status: "calculated",
+                payout_status: "pending",
+                transaction_date:
+                  transactionData.transaction_date.toISOString(),
                 calculation_date: new Date().toISOString(),
-                commission_engine_version: '1.0',
+                commission_engine_version: "1.0",
                 metadata: transactionData.metadata || {},
                 created_at: new Date().toISOString(),
-                updated_at: new Date().toISOString()
+                updated_at: new Date().toISOString(),
               });
 
               totalCommissionAmount += commissionAmount;
             } else {
-              errors.push(`Failed to create commission record for partner ${uplinePartner.partner_code}`);
+              errors.push(
+                `Failed to create commission record for partner ${uplinePartner.partner_code}`,
+              );
             }
           }
         } catch (error) {
-          errors.push(`Error calculating commission for partner ${uplinePartner.partner_code}: ${error}`);
-          auditLog.errors.push(`Partner ${uplinePartner.partner_code}: ${error}`);
+          errors.push(
+            `Error calculating commission for partner ${uplinePartner.partner_code}: ${error}`,
+          );
+          auditLog.errors.push(
+            `Partner ${uplinePartner.partner_code}: ${error}`,
+          );
         }
       }
 
@@ -1211,15 +1392,15 @@ export async function processCommissionCalculation(transactionData: TransactionD
       auditLog.existing_commissions_found = existingCommissionsFound;
       auditLog.total_commission_amount = totalCommissionAmount;
       auditLog.processing_time_ms = Date.now() - startTime;
-      auditLog.status = 'completed';
-      
+      auditLog.status = "completed";
+
       // Log the commission calculation for audit trail
-      console.log('Commission calculation audit:', auditLog);
+      console.log("Commission calculation audit:", auditLog);
 
       return {
         calculatedCommissions,
         errors,
-        totalCommissionAmount
+        totalCommissionAmount,
       };
     });
 
@@ -1229,22 +1410,21 @@ export async function processCommissionCalculation(transactionData: TransactionD
       total_commissions_calculated: result.calculatedCommissions.length,
       total_commission_amount: result.totalCommissionAmount,
       commissions: result.calculatedCommissions,
-      errors: result.errors.length > 0 ? result.errors : undefined
+      errors: result.errors.length > 0 ? result.errors : undefined,
     };
-
   } catch (error) {
-    auditLog.status = 'failed';
+    auditLog.status = "failed";
     auditLog.errors.push(`Commission calculation failed: ${error}`);
     auditLog.processing_time_ms = Date.now() - startTime;
-    console.error('Commission calculation audit:', auditLog);
-    
+    console.error("Commission calculation audit:", auditLog);
+
     return {
       success: false,
       transaction_id: transactionData.transaction_id,
       total_commissions_calculated: 0,
       total_commission_amount: 0,
       commissions: [],
-      errors: [`Commission calculation failed: ${error}`]
+      errors: [`Commission calculation failed: ${error}`],
     };
   }
 }
@@ -1252,19 +1432,23 @@ export async function processCommissionCalculation(transactionData: TransactionD
 /**
  * Get commission records for a partner
  */
-export async function getPartnerCommissions(partnerId: string, options: {
-  limit?: number;
-  offset?: number;
-  status?: string;
-  transaction_type?: string;
-} = {}): Promise<Commission[]> {
+export async function getPartnerCommissions(
+  partnerId: string,
+  options: {
+    limit?: number;
+    offset?: number;
+    status?: string;
+    transaction_type?: string;
+  } = {},
+): Promise<Commission[]> {
   try {
     const tenantId = await getCurrentTenantId();
     if (!tenantId) {
-      throw new Error('Unable to determine tenant context');
+      throw new Error("Unable to determine tenant context");
     }
 
-    let whereClause = 'WHERE pc.tenant_id = $1 AND pc.beneficiary_partner_id = $2';
+    let whereClause =
+      "WHERE pc.tenant_id = $1 AND pc.beneficiary_partner_id = $2";
     const params: any[] = [tenantId, partnerId];
     let paramIndex = 3;
 
@@ -1280,25 +1464,28 @@ export async function getPartnerCommissions(partnerId: string, options: {
       paramIndex++;
     }
 
-    const limitClause = options.limit ? `LIMIT $${paramIndex}` : 'LIMIT 100';
+    const limitClause = options.limit ? `LIMIT $${paramIndex}` : "LIMIT 100";
     if (options.limit) {
       params.push(options.limit);
       paramIndex++;
     }
 
-    const offsetClause = options.offset ? `OFFSET $${paramIndex}` : '';
+    const offsetClause = options.offset ? `OFFSET $${paramIndex}` : "";
     if (options.offset) {
       params.push(options.offset);
     }
 
-    const result = await execute_sql(`
+    const result = await execute_sql(
+      `
       SELECT 
         pc.*
       FROM partner_commissions pc
       ${whereClause}
       ORDER BY pc.transaction_date DESC, pc.calculation_date DESC
       ${limitClause} ${offsetClause};
-    `, params);
+    `,
+      params,
+    );
 
     return result.rows.map((row: any) => ({
       id: row.id,
@@ -1326,10 +1513,10 @@ export async function getPartnerCommissions(partnerId: string, options: {
       notes: row.notes,
       metadata: row.metadata || {},
       created_at: row.created_at,
-      updated_at: row.updated_at
+      updated_at: row.updated_at,
     }));
   } catch (error) {
-    console.error('Error getting partner commissions:', error);
+    console.error("Error getting partner commissions:", error);
     return [];
   }
 }
@@ -1348,10 +1535,11 @@ export async function getPartnerCommissionStats(partnerId: string): Promise<{
   try {
     const tenantId = await getCurrentTenantId();
     if (!tenantId) {
-      throw new Error('Unable to determine tenant context');
+      throw new Error("Unable to determine tenant context");
     }
 
-    const result = await execute_sql(`
+    const result = await execute_sql(
+      `
       SELECT 
         COALESCE(SUM(commission_amount), 0) as total_earnings,
         COALESCE(SUM(CASE WHEN payout_status = 'pending' THEN commission_amount ELSE 0 END), 0) as pending_earnings,
@@ -1361,7 +1549,9 @@ export async function getPartnerCommissionStats(partnerId: string): Promise<{
         COUNT(CASE WHEN payout_status = 'paid' THEN 1 END) as paid_transactions
       FROM partner_commissions
       WHERE tenant_id = $1 AND beneficiary_partner_id = $2;
-    `, [tenantId, partnerId]);
+    `,
+      [tenantId, partnerId],
+    );
 
     const stats = result.rows[0];
     return {
@@ -1373,7 +1563,7 @@ export async function getPartnerCommissionStats(partnerId: string): Promise<{
       paid_transactions: parseInt(stats.paid_transactions) || 0,
     };
   } catch (error) {
-    console.error('Error getting partner commission stats:', error);
+    console.error("Error getting partner commission stats:", error);
     return {
       total_earnings: 0,
       pending_earnings: 0,
@@ -1397,11 +1587,12 @@ export async function getPartnerReferralStats(partnerId: string): Promise<{
   try {
     const tenantId = await getCurrentTenantId();
     if (!tenantId) {
-      throw new Error('Unable to determine tenant context');
+      throw new Error("Unable to determine tenant context");
     }
 
     // Get direct referrals (partners where this partner is the sponsor)
-    const result = await execute_sql(`
+    const result = await execute_sql(
+      `
       SELECT 
         COUNT(*) as total_direct_referrals,
         COUNT(CASE WHEN status = 'active' THEN 1 END) as active_referrals,
@@ -1409,7 +1600,9 @@ export async function getPartnerReferralStats(partnerId: string): Promise<{
         COUNT(CASE WHEN created_at >= DATE_TRUNC('month', CURRENT_DATE) THEN 1 END) as this_month_referrals
       FROM partners
       WHERE tenant_id = $1 AND sponsor_partner_id = $2;
-    `, [tenantId, partnerId]);
+    `,
+      [tenantId, partnerId],
+    );
 
     const stats = result.rows[0];
     return {
@@ -1419,7 +1612,7 @@ export async function getPartnerReferralStats(partnerId: string): Promise<{
       this_month_referrals: parseInt(stats.this_month_referrals) || 0,
     };
   } catch (error) {
-    console.error('Error getting partner referral stats:', error);
+    console.error("Error getting partner referral stats:", error);
     return {
       total_direct_referrals: 0,
       active_referrals: 0,
@@ -1436,6 +1629,7 @@ export async function getPartnerDashboardMetrics(partnerId: string): Promise<{
   total_earnings: number;
   pending_payouts: number;
   direct_referrals: number;
+  payable_balance: number;
   commission_stats: {
     total_earnings: number;
     pending_earnings: number;
@@ -1452,25 +1646,28 @@ export async function getPartnerDashboardMetrics(partnerId: string): Promise<{
   };
 }> {
   try {
-    // Get both commission and referral stats
-    const [commissionStats, referralStats] = await Promise.all([
+    // Get commission stats, referral stats, and payable balance
+    const [commissionStats, referralStats, payableBalance] = await Promise.all([
       getPartnerCommissionStats(partnerId),
-      getPartnerReferralStats(partnerId)
+      getPartnerReferralStats(partnerId),
+      getPartnerPayableBalance(partnerId),
     ]);
 
     return {
       total_earnings: commissionStats.total_earnings,
       pending_payouts: commissionStats.pending_earnings,
       direct_referrals: referralStats.total_direct_referrals,
+      payable_balance: payableBalance,
       commission_stats: commissionStats,
       referral_stats: referralStats,
     };
   } catch (error) {
-    console.error('Error getting partner dashboard metrics:', error);
+    console.error("Error getting partner dashboard metrics:", error);
     return {
       total_earnings: 0,
       pending_payouts: 0,
       direct_referrals: 0,
+      payable_balance: 0,
       commission_stats: {
         total_earnings: 0,
         pending_earnings: 0,
@@ -1492,15 +1689,18 @@ export async function getPartnerDashboardMetrics(partnerId: string): Promise<{
 /**
  * Get detailed commission report with filtering and pagination
  */
-export async function getPartnerCommissionReport(partnerId: string, options: {
-  limit?: number;
-  offset?: number;
-  status?: string;
-  transaction_type?: string;
-  date_from?: string;
-  date_to?: string;
-  commission_level?: number;
-} = {}): Promise<{
+export async function getPartnerCommissionReport(
+  partnerId: string,
+  options: {
+    limit?: number;
+    offset?: number;
+    status?: string;
+    transaction_type?: string;
+    date_from?: string;
+    date_to?: string;
+    commission_level?: number;
+  } = {},
+): Promise<{
   commissions: Commission[];
   total_count: number;
   summary: {
@@ -1513,10 +1713,11 @@ export async function getPartnerCommissionReport(partnerId: string, options: {
   try {
     const tenantId = await getCurrentTenantId();
     if (!tenantId) {
-      throw new Error('Unable to determine tenant context');
+      throw new Error("Unable to determine tenant context");
     }
 
-    let whereClause = 'WHERE pc.tenant_id = $1 AND pc.beneficiary_partner_id = $2';
+    let whereClause =
+      "WHERE pc.tenant_id = $1 AND pc.beneficiary_partner_id = $2";
     const params: any[] = [tenantId, partnerId];
     let paramIndex = 3;
 
@@ -1552,7 +1753,8 @@ export async function getPartnerCommissionReport(partnerId: string, options: {
     }
 
     // Get total count and summary
-    const summaryResult = await execute_sql(`
+    const summaryResult = await execute_sql(
+      `
       SELECT 
         COUNT(*) as total_count,
         COALESCE(SUM(commission_amount), 0) as total_amount,
@@ -1560,30 +1762,35 @@ export async function getPartnerCommissionReport(partnerId: string, options: {
         COALESCE(SUM(CASE WHEN payout_status = 'paid' THEN commission_amount ELSE 0 END), 0) as paid_amount
       FROM partner_commissions pc
       ${whereClause};
-    `, params);
+    `,
+      params,
+    );
 
     const summary = summaryResult.rows[0];
 
     // Get paginated commission data
-    const limitClause = options.limit ? `LIMIT $${paramIndex}` : 'LIMIT 50';
+    const limitClause = options.limit ? `LIMIT $${paramIndex}` : "LIMIT 50";
     if (options.limit) {
       params.push(options.limit);
       paramIndex++;
     }
 
-    const offsetClause = options.offset ? `OFFSET $${paramIndex}` : '';
+    const offsetClause = options.offset ? `OFFSET $${paramIndex}` : "";
     if (options.offset) {
       params.push(options.offset);
     }
 
-    const commissionsResult = await execute_sql(`
+    const commissionsResult = await execute_sql(
+      `
       SELECT 
         pc.*
       FROM partner_commissions pc
       ${whereClause}
       ORDER BY pc.transaction_date DESC, pc.calculation_date DESC
       ${limitClause} ${offsetClause};
-    `, params);
+    `,
+      params,
+    );
 
     const commissions = commissionsResult.rows.map((row: any) => ({
       id: row.id,
@@ -1611,7 +1818,7 @@ export async function getPartnerCommissionReport(partnerId: string, options: {
       notes: row.notes,
       metadata: row.metadata || {},
       created_at: row.created_at,
-      updated_at: row.updated_at
+      updated_at: row.updated_at,
     }));
 
     return {
@@ -1625,7 +1832,7 @@ export async function getPartnerCommissionReport(partnerId: string, options: {
       },
     };
   } catch (error) {
-    console.error('Error getting partner commission report:', error);
+    console.error("Error getting partner commission report:", error);
     return {
       commissions: [],
       total_count: 0,
@@ -1636,5 +1843,203 @@ export async function getPartnerCommissionReport(partnerId: string, options: {
         total_transactions: 0,
       },
     };
+  }
+}
+
+/**
+ * Get payable balance for a partner (pending earnings minus any pending payout requests)
+ */
+export async function getPartnerPayableBalance(
+  partnerId: string,
+): Promise<number> {
+  try {
+    const tenantId = await getCurrentTenantId();
+    if (!tenantId) {
+      throw new Error("Unable to determine tenant context");
+    }
+
+    // Get pending earnings from commissions
+    const commissionResult = await execute_sql(
+      `
+      SELECT COALESCE(SUM(commission_amount), 0) as pending_earnings
+      FROM partner_commissions
+      WHERE tenant_id = $1 AND beneficiary_partner_id = $2 AND payout_status = 'pending';
+    `,
+      [tenantId, partnerId],
+    );
+
+    // Get amount already requested in pending payout requests
+    const payoutResult = await execute_sql(
+      `
+      SELECT COALESCE(SUM(requested_amount), 0) as pending_requests
+      FROM payout_requests
+      WHERE tenant_id = $1 AND partner_id = $2 AND request_status = 'pending';
+    `,
+      [tenantId, partnerId],
+    );
+
+    const pendingEarnings =
+      parseFloat(commissionResult.rows[0].pending_earnings) || 0;
+    const pendingRequests =
+      parseFloat(payoutResult.rows[0].pending_requests) || 0;
+
+    return Math.max(0, pendingEarnings - pendingRequests);
+  } catch (error) {
+    console.error("Error getting partner payable balance:", error);
+    return 0;
+  }
+}
+
+/**
+ * Create a payout request
+ */
+export async function createPayoutRequest(
+  requestData: CreatePayoutRequestData,
+): Promise<string | null> {
+  try {
+    const tenantId = await getCurrentTenantId();
+    if (!tenantId) {
+      throw new Error("Unable to determine tenant context");
+    }
+
+    // Get partner details
+    const partnerResult = await execute_sql(
+      `
+      SELECT partner_code FROM partners
+      WHERE tenant_id = $1 AND id = $2 AND status = 'active';
+    `,
+      [tenantId, requestData.partner_id],
+    );
+
+    if (partnerResult.rows.length === 0) {
+      throw new Error("Partner not found or inactive");
+    }
+
+    const partnerCode = partnerResult.rows[0].partner_code;
+
+    // Get current payable balance
+    const payableBalance = await getPartnerPayableBalance(
+      requestData.partner_id,
+    );
+
+    // Validate request amount
+    if (requestData.requested_amount > payableBalance) {
+      throw new Error("Requested amount exceeds payable balance");
+    }
+
+    if (requestData.requested_amount <= 0) {
+      throw new Error("Request amount must be greater than zero");
+    }
+
+    // Check for existing pending request
+    const existingRequest = await execute_sql(
+      `
+      SELECT id FROM payout_requests
+      WHERE tenant_id = $1 AND partner_id = $2 AND request_status = 'pending';
+    `,
+      [tenantId, requestData.partner_id],
+    );
+
+    if (existingRequest.rows.length > 0) {
+      throw new Error("You already have a pending payout request");
+    }
+
+    // Create the payout request
+    const result = await execute_sql(
+      `
+      INSERT INTO payout_requests (
+        tenant_id, partner_id, partner_code, requested_amount, 
+        payable_balance_at_request, payment_method, payment_details
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7)
+      RETURNING id;
+    `,
+      [
+        tenantId,
+        requestData.partner_id,
+        partnerCode,
+        requestData.requested_amount,
+        payableBalance,
+        requestData.payment_method || "bank_transfer",
+        JSON.stringify(requestData.payment_details || {}),
+      ],
+    );
+
+    return result.rows[0].id;
+  } catch (error) {
+    console.error("Error creating payout request:", error);
+    throw error;
+  }
+}
+
+/**
+ * Get payout requests for a partner
+ */
+export async function getPartnerPayoutRequests(
+  partnerId: string,
+  options: {
+    limit?: number;
+    offset?: number;
+    status?: string;
+  } = {},
+): Promise<PayoutRequest[]> {
+  try {
+    const tenantId = await getCurrentTenantId();
+    if (!tenantId) {
+      throw new Error("Unable to determine tenant context");
+    }
+
+    let whereClause = "WHERE pr.tenant_id = $1 AND pr.partner_id = $2";
+    const params: any[] = [tenantId, partnerId];
+    let paramIndex = 3;
+
+    if (options.status) {
+      whereClause += ` AND pr.request_status = $${paramIndex}`;
+      params.push(options.status);
+      paramIndex++;
+    }
+
+    const limitClause = options.limit ? `LIMIT $${paramIndex}` : "LIMIT 20";
+    if (options.limit) {
+      params.push(options.limit);
+      paramIndex++;
+    }
+
+    const offsetClause = options.offset ? `OFFSET $${paramIndex}` : "";
+    if (options.offset) {
+      params.push(options.offset);
+    }
+
+    const result = await execute_sql(
+      `
+      SELECT pr.*
+      FROM payout_requests pr
+      ${whereClause}
+      ORDER BY pr.request_date DESC
+      ${limitClause} ${offsetClause};
+    `,
+      params,
+    );
+
+    return result.rows.map((row: any) => ({
+      id: row.id,
+      tenant_id: row.tenant_id,
+      partner_id: row.partner_id,
+      partner_code: row.partner_code,
+      requested_amount: parseFloat(row.requested_amount),
+      payable_balance_at_request: parseFloat(row.payable_balance_at_request),
+      request_status: row.request_status,
+      request_date: row.request_date,
+      reviewed_date: row.reviewed_date,
+      reviewed_by: row.reviewed_by,
+      approval_notes: row.approval_notes,
+      rejection_reason: row.rejection_reason,
+      payment_method: row.payment_method,
+      payment_details: row.payment_details || {},
+      created_at: row.created_at,
+      updated_at: row.updated_at,
+    }));
+  } catch (error) {
+    console.error("Error getting partner payout requests:", error);
+    return [];
   }
 }

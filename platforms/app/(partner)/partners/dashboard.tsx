@@ -3,6 +3,8 @@
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import { 
   DollarSign, 
   TrendingUp, 
@@ -11,15 +13,20 @@ import {
   Plus,
   Eye,
   Download,
-  Share2
+  Share2,
+  Wallet,
+  AlertCircle
 } from 'lucide-react';
 import { User } from '@/lib/auth';
 import Link from 'next/link';
+import { useState } from 'react';
+import { createPayoutRequestAction } from './payout-actions';
 
 interface DashboardMetrics {
   total_earnings: number;
   pending_payouts: number;
   direct_referrals: number;
+  payable_balance: number;
   commission_stats: {
     total_earnings: number;
     pending_earnings: number;
@@ -68,11 +75,11 @@ function StatsCards({ metrics }: { metrics: DashboardMetrics }) {
       changeType: 'positive' as const,
     },
     {
-      title: 'Paid Earnings',
-      value: `$${metrics.commission_stats.paid_earnings.toFixed(2)}`,
+      title: 'Payable Balance',
+      value: `$${metrics.payable_balance.toFixed(2)}`,
       icon: TrendingUp,
       color: 'text-purple-600 bg-purple-100',
-      change: `${metrics.commission_stats.paid_transactions} payouts`,
+      change: 'Available for payout',
       changeType: 'positive' as const,
     },
   ];
@@ -246,6 +253,117 @@ function QuickActions() {
   );
 }
 
+function PayoutRequestCard({ payableBalance }: { payableBalance: number }) {
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [requestAmount, setRequestAmount] = useState('');
+  const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+
+  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    setIsSubmitting(true);
+    setMessage(null);
+
+    try {
+      const formData = new FormData(e.currentTarget);
+      const result = await createPayoutRequestAction(formData);
+
+      if (result.success) {
+        setMessage({ type: 'success', text: result.message });
+        setRequestAmount('');
+      } else {
+        setMessage({ type: 'error', text: result.error });
+      }
+    } catch (error) {
+      setMessage({ type: 'error', text: 'Failed to submit payout request. Please try again.' });
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2">
+          <Wallet className="h-5 w-5" />
+          Request Payout
+        </CardTitle>
+      </CardHeader>
+      <CardContent>
+        <div className="space-y-4">
+          {/* Current Balance Display */}
+          <div className="bg-gray-50 p-4 rounded-lg">
+            <div className="text-sm text-gray-600">Current Payable Balance</div>
+            <div className="text-2xl font-bold text-green-600">
+              ${payableBalance.toFixed(2)}
+            </div>
+            <div className="text-xs text-gray-500 mt-1">
+              Available for immediate payout request
+            </div>
+          </div>
+
+          {/* Success/Error Messages */}
+          {message && (
+            <div className={`p-3 rounded-lg flex items-center gap-2 ${
+              message.type === 'success' 
+                ? 'bg-green-50 text-green-800 border border-green-200' 
+                : 'bg-red-50 text-red-800 border border-red-200'
+            }`}>
+              <AlertCircle className="h-4 w-4" />
+              <span className="text-sm">{message.text}</span>
+            </div>
+          )}
+
+          {/* Payout Request Form */}
+          {payableBalance > 0 ? (
+            <form onSubmit={handleSubmit} className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="requested_amount">Request Amount</Label>
+                <Input
+                  id="requested_amount"
+                  name="requested_amount"
+                  type="number"
+                  step="0.01"
+                  min="0.01"
+                  max={payableBalance}
+                  value={requestAmount}
+                  onChange={(e) => setRequestAmount(e.target.value)}
+                  placeholder="Enter amount to request"
+                  required
+                />
+                <div className="text-xs text-gray-500">
+                  Maximum: ${payableBalance.toFixed(2)}
+                </div>
+              </div>
+
+              <input type="hidden" name="payment_method" value="bank_transfer" />
+
+              <Button 
+                type="submit" 
+                className="w-full" 
+                disabled={isSubmitting || payableBalance <= 0}
+              >
+                {isSubmitting ? 'Submitting...' : 'Request Payout'}
+              </Button>
+            </form>
+          ) : (
+            <div className="text-center py-4 text-gray-500">
+              <Wallet className="h-8 w-8 mx-auto mb-2 text-gray-400" />
+              <p className="text-sm">No funds available for payout</p>
+              <p className="text-xs">Earn commissions to request payouts</p>
+            </div>
+          )}
+
+          <div className="text-xs text-gray-500">
+            <p>• Payout requests are reviewed within 2-3 business days</p>
+            <p>• You can only have one pending request at a time</p>
+            <p>• Minimum payout amount: $10.00</p>
+          </div>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
 export function PartnerDashboard({ user, dashboardMetrics }: PartnerDashboardProps) {
   return (
     <div className="space-y-6">
@@ -277,7 +395,8 @@ export function PartnerDashboard({ user, dashboardMetrics }: PartnerDashboardPro
         <div className="lg:col-span-2">
           <RecentActivity />
         </div>
-        <div>
+        <div className="space-y-6">
+          <PayoutRequestCard payableBalance={dashboardMetrics.payable_balance} />
           <QuickActions />
         </div>
       </div>
