@@ -299,6 +299,186 @@ export const PARTNER_APPLICATIONS_TRIGGERS_SQL = `
     EXECUTE FUNCTION update_updated_at_column();
 `;
 
+// Partner Commissions table for Commission Engine
+export const PARTNER_COMMISSIONS_TABLE_SQL = `
+  CREATE TABLE IF NOT EXISTS partner_commissions (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    tenant_id UUID NOT NULL,
+    transaction_id VARCHAR(255) NOT NULL,
+    transaction_amount DECIMAL(15,2) NOT NULL,
+    transaction_type VARCHAR(50) DEFAULT 'payment' CHECK (transaction_type IN ('payment', 'signup', 'recurring', 'bonus')),
+    
+    -- Who receives the commission
+    beneficiary_partner_id UUID NOT NULL,
+    beneficiary_partner_code VARCHAR(50) NOT NULL,
+    
+    -- Who made the original sale/transaction
+    source_partner_id UUID NOT NULL,
+    source_partner_code VARCHAR(50) NOT NULL,
+    
+    -- Commission calculation details
+    commission_level INTEGER NOT NULL DEFAULT 1,
+    levels_from_source INTEGER NOT NULL DEFAULT 1,
+    commission_percentage DECIMAL(5,4) NOT NULL,
+    commission_amount DECIMAL(15,2) NOT NULL,
+    
+    -- Partner level information at time of calculation
+    beneficiary_partner_level_id UUID NOT NULL,
+    beneficiary_partner_level_name VARCHAR(100) NOT NULL,
+    
+    -- Commission status and tracking
+    calculation_status VARCHAR(20) DEFAULT 'calculated' CHECK (calculation_status IN ('calculated', 'approved', 'paid', 'cancelled', 'disputed')),
+    payout_status VARCHAR(20) DEFAULT 'pending' CHECK (payout_status IN ('pending', 'processing', 'paid', 'failed', 'cancelled')),
+    
+    -- Dates and timestamps
+    transaction_date TIMESTAMP WITH TIME ZONE NOT NULL,
+    calculation_date TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    approved_date TIMESTAMP WITH TIME ZONE,
+    paid_date TIMESTAMP WITH TIME ZONE,
+    
+    -- Additional tracking
+    commission_engine_version VARCHAR(20) DEFAULT '1.0',
+    notes TEXT,
+    metadata JSONB DEFAULT '{}'::jsonb,
+    
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    
+    -- Multi-tenant constraints with ON DELETE RESTRICT for data integrity
+    CONSTRAINT fk_partner_commissions_tenant FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
+    CONSTRAINT fk_partner_commissions_level FOREIGN KEY (beneficiary_partner_level_id) REFERENCES partner_levels(id) ON DELETE RESTRICT,
+    
+    -- Business logic constraints
+    CONSTRAINT check_commission_amounts_positive CHECK (
+      transaction_amount > 0 AND commission_amount >= 0
+    ),
+    CONSTRAINT check_commission_percentage_valid CHECK (
+      commission_percentage >= 0 AND commission_percentage <= 1
+    ),
+    CONSTRAINT check_levels_positive CHECK (
+      commission_level > 0 AND levels_from_source > 0
+    ),
+    CONSTRAINT check_calculation_before_approval CHECK (
+      approved_date IS NULL OR approved_date >= calculation_date
+    ),
+    CONSTRAINT check_approval_before_payment CHECK (
+      paid_date IS NULL OR (approved_date IS NOT NULL AND paid_date >= approved_date)
+    ),
+    
+    -- Unique constraint to prevent duplicate commission calculations
+    CONSTRAINT unique_commission_per_transaction_beneficiary UNIQUE (tenant_id, transaction_id, beneficiary_partner_id, commission_level),
+    CONSTRAINT unique_commission_per_transaction_source UNIQUE (tenant_id, transaction_id, beneficiary_partner_id, levels_from_source)
+  );
+`;
+
+export const PARTNER_COMMISSIONS_INDEXES_SQL = `
+  -- Performance indexes for partner commissions
+  CREATE INDEX IF NOT EXISTS idx_partner_commissions_tenant_id ON partner_commissions(tenant_id);
+  CREATE INDEX IF NOT EXISTS idx_partner_commissions_transaction_id ON partner_commissions(transaction_id);
+  CREATE INDEX IF NOT EXISTS idx_partner_commissions_beneficiary ON partner_commissions(beneficiary_partner_id);
+  CREATE INDEX IF NOT EXISTS idx_partner_commissions_source ON partner_commissions(source_partner_id);
+  CREATE INDEX IF NOT EXISTS idx_partner_commissions_calculation_status ON partner_commissions(calculation_status);
+  CREATE INDEX IF NOT EXISTS idx_partner_commissions_payout_status ON partner_commissions(payout_status);
+  CREATE INDEX IF NOT EXISTS idx_partner_commissions_transaction_date ON partner_commissions(transaction_date);
+  CREATE INDEX IF NOT EXISTS idx_partner_commissions_calculation_date ON partner_commissions(calculation_date);
+  
+  -- Critical composite indexes for multi-tenant performance optimization
+  CREATE INDEX IF NOT EXISTS idx_partner_commissions_tenant_beneficiary ON partner_commissions(tenant_id, beneficiary_partner_id);
+  CREATE INDEX IF NOT EXISTS idx_partner_commissions_tenant_source ON partner_commissions(tenant_id, source_partner_id);
+  CREATE INDEX IF NOT EXISTS idx_partner_commissions_tenant_payout_status ON partner_commissions(tenant_id, payout_status);
+  CREATE INDEX IF NOT EXISTS idx_partner_commissions_tenant_transaction_date ON partner_commissions(tenant_id, transaction_date);
+  CREATE INDEX IF NOT EXISTS idx_partner_commissions_tenant_transaction_id ON partner_commissions(tenant_id, transaction_id);
+  
+  -- Additional composite indexes for common query patterns
+  CREATE INDEX IF NOT EXISTS idx_partner_commissions_beneficiary_status ON partner_commissions(beneficiary_partner_id, payout_status);
+  CREATE INDEX IF NOT EXISTS idx_partner_commissions_source_date ON partner_commissions(source_partner_id, transaction_date);
+  CREATE INDEX IF NOT EXISTS idx_partner_commissions_pending_payouts ON partner_commissions(tenant_id, payout_status, calculation_date) 
+    WHERE payout_status = 'pending';
+  
+  -- Covering indexes for high-performance tenant-scoped queries
+  CREATE INDEX IF NOT EXISTS idx_partner_commissions_tenant_beneficiary_covering ON partner_commissions(tenant_id, beneficiary_partner_id) 
+    INCLUDE (commission_amount, payout_status, transaction_date);
+  CREATE INDEX IF NOT EXISTS idx_partner_commissions_tenant_transaction_covering ON partner_commissions(tenant_id, transaction_id) 
+    INCLUDE (beneficiary_partner_id, source_partner_id, commission_amount);
+`;
+
+export const PARTNER_COMMISSIONS_TRIGGERS_SQL = `
+  -- Security validation function for cross-tenant reference prevention
+  CREATE OR REPLACE FUNCTION validate_partner_commissions_tenant_references()
+  RETURNS TRIGGER AS $$
+  DECLARE
+    beneficiary_tenant_id UUID;
+    source_tenant_id UUID;
+    level_tenant_id UUID;
+  BEGIN
+    -- Validate beneficiary partner exists and belongs to same tenant
+    SELECT tenant_id INTO beneficiary_tenant_id
+    FROM partners 
+    WHERE id = NEW.beneficiary_partner_id;
+    
+    IF beneficiary_tenant_id IS NULL THEN
+      RAISE EXCEPTION 'Beneficiary partner ID % does not exist', NEW.beneficiary_partner_id;
+    END IF;
+    
+    IF beneficiary_tenant_id != NEW.tenant_id THEN
+      RAISE EXCEPTION 'SECURITY VIOLATION: Beneficiary partner % belongs to tenant % but commission is for tenant %', 
+        NEW.beneficiary_partner_id, beneficiary_tenant_id, NEW.tenant_id;
+    END IF;
+    
+    -- Validate source partner exists and belongs to same tenant  
+    SELECT tenant_id INTO source_tenant_id
+    FROM partners 
+    WHERE id = NEW.source_partner_id;
+    
+    IF source_tenant_id IS NULL THEN
+      RAISE EXCEPTION 'Source partner ID % does not exist', NEW.source_partner_id;
+    END IF;
+    
+    IF source_tenant_id != NEW.tenant_id THEN
+      RAISE EXCEPTION 'SECURITY VIOLATION: Source partner % belongs to tenant % but commission is for tenant %', 
+        NEW.source_partner_id, source_tenant_id, NEW.tenant_id;
+    END IF;
+    
+    -- Validate partner level exists and belongs to same tenant
+    SELECT tenant_id INTO level_tenant_id
+    FROM partner_levels 
+    WHERE id = NEW.beneficiary_partner_level_id;
+    
+    IF level_tenant_id IS NULL THEN
+      RAISE EXCEPTION 'Partner level ID % does not exist', NEW.beneficiary_partner_level_id;
+    END IF;
+    
+    IF level_tenant_id != NEW.tenant_id THEN
+      RAISE EXCEPTION 'SECURITY VIOLATION: Partner level % belongs to tenant % but commission is for tenant %', 
+        NEW.beneficiary_partner_level_id, level_tenant_id, NEW.tenant_id;
+    END IF;
+    
+    RETURN NEW;
+  END;
+  $$ language 'plpgsql';
+
+  -- Create security validation trigger for INSERT
+  DROP TRIGGER IF EXISTS trigger_validate_partner_commissions_tenant_refs_insert ON partner_commissions;
+  CREATE TRIGGER trigger_validate_partner_commissions_tenant_refs_insert
+    BEFORE INSERT ON partner_commissions
+    FOR EACH ROW
+    EXECUTE FUNCTION validate_partner_commissions_tenant_references();
+
+  -- Create security validation trigger for UPDATE
+  DROP TRIGGER IF EXISTS trigger_validate_partner_commissions_tenant_refs_update ON partner_commissions;
+  CREATE TRIGGER trigger_validate_partner_commissions_tenant_refs_update
+    BEFORE UPDATE ON partner_commissions
+    FOR EACH ROW
+    EXECUTE FUNCTION validate_partner_commissions_tenant_references();
+
+  -- Standard updated_at trigger
+  DROP TRIGGER IF EXISTS trigger_update_partner_commissions_updated_at ON partner_commissions;
+  CREATE TRIGGER trigger_update_partner_commissions_updated_at
+    BEFORE UPDATE ON partner_commissions
+    FOR EACH ROW
+    EXECUTE FUNCTION update_updated_at_column();
+`;
+
 // Additional business logic triggers
 export const PARTNER_COMMISSION_RATE_TRIGGER_SQL = `
   CREATE OR REPLACE FUNCTION validate_partner_commission_rate()
@@ -342,14 +522,16 @@ export const ALL_PARTNER_TABLES_SQL = [
   PARTNER_LEVELS_TABLE_SQL,
   PARTNERS_TABLE_SQL,
   PARTNER_RELATIONS_TABLE_SQL,
-  PARTNER_APPLICATIONS_TABLE_SQL
+  PARTNER_APPLICATIONS_TABLE_SQL,
+  PARTNER_COMMISSIONS_TABLE_SQL
 ].join('\n\n');
 
 export const ALL_PARTNER_INDEXES_SQL = [
   PARTNER_LEVELS_INDEXES_SQL,
   PARTNERS_INDEXES_SQL,
   PARTNER_RELATIONS_INDEXES_SQL,
-  PARTNER_APPLICATIONS_INDEXES_SQL
+  PARTNER_APPLICATIONS_INDEXES_SQL,
+  PARTNER_COMMISSIONS_INDEXES_SQL
 ].join('\n\n');
 
 export const ALL_PARTNER_TRIGGERS_SQL = [
@@ -358,5 +540,6 @@ export const ALL_PARTNER_TRIGGERS_SQL = [
   PARTNERS_TRIGGERS_SQL,
   PARTNER_RELATIONS_TRIGGERS_SQL,
   PARTNER_APPLICATIONS_TRIGGERS_SQL,
+  PARTNER_COMMISSIONS_TRIGGERS_SQL,
   PARTNER_COMMISSION_RATE_TRIGGER_SQL
 ].join('\n\n');
