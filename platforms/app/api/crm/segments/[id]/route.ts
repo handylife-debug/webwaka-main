@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { execute_sql } from '../../../../../lib/database'
 import { getTenantContext, validateTenantAccess } from '../../../../../lib/tenant-context'
+import { withStaffPermissions } from '../../../../../lib/permission-middleware'
 import { z } from 'zod'
 
 // Segment update schema (all fields optional)
@@ -51,7 +52,7 @@ const segmentUpdateSchema = z.object({
 });
 
 // GET - Get specific segment details with members
-export async function GET(request: NextRequest, { params }: { params: { id: string } }) {
+export const GET = withStaffPermissions('customers.view')(async function(request: NextRequest, { params }: { params: { id: string } }) {
   try {
     const { tenantId } = await getTenantContext(request);
     await validateTenantAccess(tenantId, request);
@@ -148,10 +149,10 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
       error: error instanceof Error ? error.message : 'Unknown error'
     }, { status: 500 });
   }
-}
+});
 
 // PUT - Update segment details
-export async function PUT(request: NextRequest, { params }: { params: { id: string } }) {
+export const PUT = withStaffPermissions('customers.edit')(async function(request: NextRequest, { params }: { params: { id: string } }) {
   try {
     const { tenantId } = await getTenantContext(request);
     await validateTenantAccess(tenantId, request);
@@ -255,10 +256,10 @@ export async function PUT(request: NextRequest, { params }: { params: { id: stri
       error: error instanceof Error ? error.message : 'Unknown error'
     }, { status: 500 });
   }
-}
+});
 
 // DELETE - Delete segment
-export async function DELETE(request: NextRequest, { params }: { params: { id: string } }) {
+export const DELETE = withStaffPermissions('customers.delete')(async function(request: NextRequest, { params }: { params: { id: string } }) {
   try {
     const { tenantId } = await getTenantContext(request);
     await validateTenantAccess(tenantId, request);
@@ -304,7 +305,7 @@ export async function DELETE(request: NextRequest, { params }: { params: { id: s
       error: error instanceof Error ? error.message : 'Unknown error'
     }, { status: 500 });
   }
-}
+});
 
 async function recalculateAutomaticSegment(tenantId: string, segmentId: string, criteria: any) {
   try {

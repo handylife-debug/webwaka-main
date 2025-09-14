@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { execute_sql } from '../../../../../../lib/database'
 import { getTenantContext, validateTenantAccess } from '../../../../../../lib/tenant-context'
+import { withStaffPermissions } from '../../../../../../lib/permission-middleware'
 import { z } from 'zod'
 
 // Schema for adding/removing segment members
@@ -24,7 +25,7 @@ const bulkMemberSchema = z.object({
 });
 
 // GET - List segment members with filtering
-export async function GET(request: NextRequest, { params }: { params: { id: string } }) {
+export const GET = withStaffPermissions('customers.view')(async function(request: NextRequest, { params }: { params: { id: string } }) {
   try {
     const { tenantId } = await getTenantContext(request);
     await validateTenantAccess(tenantId, request);
@@ -170,10 +171,10 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
       error: error instanceof Error ? error.message : 'Unknown error'
     }, { status: 500 });
   }
-}
+});
 
 // POST - Add or remove customers from segment
-export async function POST(request: NextRequest, { params }: { params: { id: string } }) {
+export const POST = withStaffPermissions('customers.edit')(async function(request: NextRequest, { params }: { params: { id: string } }) {
   try {
     const { tenantId } = await getTenantContext(request);
     await validateTenantAccess(tenantId, request);
@@ -205,7 +206,7 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
       error: error instanceof Error ? error.message : 'Unknown error'
     }, { status: 500 });
   }
-}
+});
 
 async function handleIndividualMemberOperation(tenantId: string, segmentId: string, body: any) {
   const validatedData = segmentMemberSchema.parse(body);

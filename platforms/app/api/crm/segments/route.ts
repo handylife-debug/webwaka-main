@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { execute_sql } from '../../../../lib/database'
 import { getTenantContext, validateTenantAccess } from '../../../../lib/tenant-context'
+import { withStaffPermissions } from '../../../../lib/permission-middleware'
 import { z } from 'zod'
 
 // Customer segment validation schema
@@ -51,7 +52,7 @@ const segmentSchema = z.object({
 });
 
 // GET - List customer segments with customer counts
-export async function GET(request: NextRequest) {
+export const GET = withStaffPermissions('customers.view')(async function(request: NextRequest) {
   try {
     const { tenantId } = await getTenantContext(request);
     await validateTenantAccess(tenantId, request);
@@ -144,10 +145,10 @@ export async function GET(request: NextRequest) {
       error: error instanceof Error ? error.message : 'Unknown error'
     }, { status: 500 });
   }
-}
+});
 
 // POST - Create new customer segment
-export async function POST(request: NextRequest) {
+export const POST = withStaffPermissions('customers.create')(async function(request: NextRequest) {
   try {
     const { tenantId } = await getTenantContext(request);
     await validateTenantAccess(tenantId, request);
@@ -225,7 +226,7 @@ export async function POST(request: NextRequest) {
       error: error instanceof Error ? error.message : 'Unknown error'
     }, { status: 500 });
   }
-}
+});
 
 async function populateAutomaticSegment(tenantId: string, segmentId: string, criteria: any) {
   try {
