@@ -5,6 +5,7 @@ import { ShoppingCart, Search, Menu, CreditCard, DollarSign, Package, Users, Bar
 import TransactionProcessingCell, { PaymentResult, SplitPayment, DraftSale } from './components/TransactionProcessingCell'
 import PromotionsCell, { AppliedPromotion } from './components/PromotionsCell'
 import TaxAndFeeCell, { TaxCalculation, FeeCalculation } from './components/TaxAndFeeCell'
+import { OfflineProvider, useOffline, OfflineStatusIndicator } from './components/OfflineTissue'
 
 interface Product {
   id: string
@@ -19,30 +20,31 @@ interface CartItem extends Product {
   quantity: number
 }
 
-const SAMPLE_PRODUCTS: Product[] = [
-  { id: '1', name: 'Espresso', price: 3.50, category: 'Beverages', stock: 50 },
-  { id: '2', name: 'Latte', price: 4.25, category: 'Beverages', stock: 45 },
-  { id: '3', name: 'Croissant', price: 2.75, category: 'Pastries', stock: 20 },
-  { id: '4', name: 'Sandwich', price: 8.95, category: 'Food', stock: 15 },
-  { id: '5', name: 'Muffin', price: 3.25, category: 'Pastries', stock: 12 },
-  { id: '6', name: 'Cappuccino', price: 4.00, category: 'Beverages', stock: 40 },
-]
+const CATEGORIES = ['All', 'Beverages', 'Food', 'Pastries', 'Snacks']
 
-const CATEGORIES = ['All', 'Beverages', 'Food', 'Pastries']
+function POSMain() {
+  // Get offline context
+  const {
+    getProducts,
+    saveDraft: saveOfflineDraft,
+    getDrafts,
+    saveTransaction,
+    updateProduct
+  } = useOffline()
 
-export default function POSPage() {
   const [cart, setCart] = useState<CartItem[]>([])
   const [selectedCategory, setSelectedCategory] = useState('All')
   const [searchTerm, setSearchTerm] = useState('')
   const [isExpressMode, setIsExpressMode] = useState(false)
   const [showPayment, setShowPayment] = useState(false)
   const [showCart, setShowCart] = useState(false)
-  const [products, setProducts] = useState(SAMPLE_PRODUCTS)
+  const [products, setProducts] = useState<Product[]>([])
   const [showTransactionProcessing, setShowTransactionProcessing] = useState(false)
   const [draftSales, setDraftSales] = useState<DraftSale[]>([])
   const [showDraftSales, setShowDraftSales] = useState(false)
   const [showPromotions, setShowPromotions] = useState(false)
   const [showTaxAndFees, setShowTaxAndFees] = useState(false)
+  const [isLoading, setIsLoading] = useState(true)
   
   // Promotions and Tax state
   const [appliedPromotions, setAppliedPromotions] = useState<AppliedPromotion[]>([])
@@ -52,26 +54,59 @@ export default function POSPage() {
   const [totalTax, setTotalTax] = useState(0)
   const [totalFees, setTotalFees] = useState(0)
 
-  // Load cart from localStorage on mount
+  // Load data from offline database on mount
   useEffect(() => {
-    const savedCart = localStorage.getItem('pos-cart')
-    if (savedCart) {
-      setCart(JSON.parse(savedCart))
+    const loadData = async () => {
+      try {
+        setIsLoading(true)
+        
+        // Load products from offline database
+        const offlineProducts = await getProducts()
+        setProducts(offlineProducts)
+        
+        // Load draft sales from offline database
+        const offlineDrafts = await getDrafts()
+        setDraftSales(offlineDrafts.map(draft => ({
+          id: draft.id,
+          items: draft.items.map(item => ({
+            id: item.productId,
+            name: item.name,
+            price: item.price,
+            category: 'Unknown', // Category not stored in draft
+            stock: 0, // Stock not stored in draft
+            quantity: item.quantity
+          })),
+          customerInfo: draft.customerInfo,
+          total: draft.total,
+          amountPaid: draft.paidAmount,
+          amountDue: draft.remainingAmount,
+          status: draft.status as 'draft' | 'partial' | 'completed',
+          createdAt: new Date(draft.createdAt),
+          splitPayments: [] // Initialize empty split payments
+        })))
+        
+        // Load cart from localStorage (for session persistence)
+        const savedCart = localStorage.getItem('pos-cart')
+        if (savedCart) {
+          setCart(JSON.parse(savedCart))
+        }
+        
+      } catch (error) {
+        console.error('Error loading offline data:', error)
+      } finally {
+        setIsLoading(false)
+      }
     }
-    
-    // Load draft sales from localStorage
-    const savedDrafts = localStorage.getItem('pos-draft-sales')
-    if (savedDrafts) {
-      setDraftSales(JSON.parse(savedDrafts))
-    }
-  }, [])
 
-  // Save cart to localStorage whenever it changes
+    loadData()
+  }, [getProducts, getDrafts])
+
+  // Save cart to localStorage whenever it changes (for session persistence)
   useEffect(() => {
     localStorage.setItem('pos-cart', JSON.stringify(cart))
   }, [cart])
 
-  const filteredProducts = SAMPLE_PRODUCTS.filter(product => {
+  const filteredProducts = products.filter(product => {
     const matchesCategory = selectedCategory === 'All' || product.category === selectedCategory
     const matchesSearch = product.name.toLowerCase().includes(searchTerm.toLowerCase())
     return matchesCategory && matchesSearch
@@ -183,7 +218,7 @@ export default function POSPage() {
     setShowPayment(false)
   }
 
-  const handlePaymentComplete = (result: PaymentResult, splitPayments?: SplitPayment[]) => {
+  const handlePaymentComplete = async (result: PaymentResult, splitPayments?: SplitPayment[]) => {
     if (!result.success) {
       alert(`Payment failed: ${result.message}`)
       return
@@ -201,33 +236,111 @@ export default function POSPage() {
       return
     }
 
-    // Update stock levels
-    setProducts(prev => 
-      prev.map(product => {
-        const cartItem = cart.find(item => item.id === product.id)
-        if (cartItem && cartItem.quantity <= product.stock) {
-          return { ...product, stock: product.stock - cartItem.quantity }
-        }
-        return product
-      })
-    )
+    try {
+      // Save transaction to offline database
+      const transactionData = {
+        items: cart.map(item => ({
+          productId: item.id,
+          name: item.name,
+          price: item.price,
+          quantity: item.quantity,
+          subtotal: item.price * item.quantity
+        })),
+        subtotal: baseSubtotal,
+        discounts: appliedPromotions.map(promo => ({
+          id: promo.id,
+          type: promo.type,
+          name: promo.name,
+          amount: promo.discountAmount
+        })),
+        taxes: calculatedTaxes.map(tax => ({
+          id: tax.id,
+          name: tax.name,
+          rate: tax.rate,
+          amount: tax.amount
+        })),
+        fees: calculatedFees.map(fee => ({
+          id: fee.id,
+          name: fee.name,
+          amount: fee.amount
+        })),
+        total: cartTotal,
+        paymentMethod: splitPayments ? 'Split Payment' : (result.message || 'Cash'),
+        paymentStatus: 'completed' as const,
+        cashier: 'Current User', // TODO: Get actual cashier info
+        notes: splitPayments ? `Split into ${splitPayments.length} payments` : undefined
+      }
 
-    // Show success message
-    const paymentDetails = splitPayments 
-      ? `Split payment completed (${splitPayments.length} transactions)`
-      : `Payment processed via ${result.message}`
-    
-    alert(`${paymentDetails}\nTransaction ID: ${result.transactionId}\nReceipt will be printed.`)
+      await saveTransaction(transactionData)
+
+      // Update stock levels in offline database
+      for (const cartItem of cart) {
+        if (cartItem.quantity > 0) {
+          await updateProduct(cartItem.id, {
+            stock: Math.max(0, cartItem.stock - cartItem.quantity)
+          })
+        }
+      }
+      
+      // Update local products state
+      setProducts(prev => 
+        prev.map(product => {
+          const cartItem = cart.find(item => item.id === product.id)
+          if (cartItem && cartItem.quantity <= product.stock) {
+            return { ...product, stock: product.stock - cartItem.quantity }
+          }
+          return product
+        })
+      )
+
+      // Show success message
+      const paymentDetails = splitPayments 
+        ? `Split payment completed (${splitPayments.length} transactions)`
+        : `Payment processed via ${result.message}`
+      
+      alert(`${paymentDetails}\nTransaction ID: ${result.transactionId}\nReceipt will be printed.\n\nTransaction saved offline and will sync when connected.`)
+      
+    } catch (error) {
+      console.error('Error saving transaction:', error)
+      alert('Payment processed but failed to save transaction offline. Please check connection.')
+    }
     
     clearCart()
     setShowCart(false)
     setShowTransactionProcessing(false)
   }
 
-  const handleSaveDraft = (draft: DraftSale) => {
-    setDraftSales(prev => [...prev, draft])
-    localStorage.setItem('pos-draft-sales', JSON.stringify([...draftSales, draft]))
-    alert(`Draft sale saved for ${draft.customerInfo?.name || 'Customer'}\nSale ID: ${draft.id}`)
+  const handleSaveDraft = async (draft: DraftSale) => {
+    try {
+      // Save to offline database
+      const draftData = {
+        items: draft.items.map(item => ({
+          productId: item.id,
+          name: item.name,
+          price: item.price,
+          quantity: item.quantity,
+          subtotal: item.price * item.quantity
+        })),
+        customerInfo: draft.customerInfo,
+        subtotal: draft.total - (draft.amountPaid || 0),
+        total: draft.total,
+        paidAmount: draft.amountPaid || 0,
+        remainingAmount: draft.amountDue || 0,
+        status: draft.status === 'draft' ? 'draft' as const : 
+                draft.status === 'partial' ? 'layaway' as const : 'ready_for_pickup' as const,
+        notes: `Draft saved. Split payments: ${draft.splitPayments?.length || 0}`
+      }
+
+      await saveOfflineDraft(draftData)
+      
+      // Update local state
+      setDraftSales(prev => [...prev, draft])
+      
+      alert(`Draft sale saved for ${draft.customerInfo?.name || 'Customer'}\nSale ID: ${draft.id}\n\nSaved offline and will sync when connected.`)
+    } catch (error) {
+      console.error('Error saving draft:', error)
+      alert('Failed to save draft offline. Please try again.')
+    }
   }
 
   const handlePromotionsApplied = (promotions: AppliedPromotion[], newSubtotal: number) => {
@@ -269,7 +382,10 @@ export default function POSPage() {
               </span>
             )}
           </button>
-          <h1 className="text-xl font-bold text-gray-900">POS Manager</h1>
+          <div className="flex items-center space-x-4">
+            <h1 className="text-xl font-bold text-gray-900">POS Manager</h1>
+            <OfflineStatusIndicator />
+          </div>
         </div>
         
         <div className="flex items-center space-x-4">
@@ -853,5 +969,14 @@ export default function POSPage() {
         onClose={() => setShowTaxAndFees(false)}
       />
     </div>
+  )
+}
+
+// Wrapper component with offline provider
+export default function POSPage() {
+  return (
+    <OfflineProvider>
+      <POSMain />
+    </OfflineProvider>
   )
 }
