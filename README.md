@@ -232,7 +232,7 @@ The application uses automatic table creation. To manually initialize:
 ```bash
 # Run database initialization endpoints
 curl -X POST http://localhost:5000/api/admin/init-people-management
-curl -X POST http://localhost:5000/api/admin/init-partner-tables
+curl -X POST http://localhost:5000/api/admin/init-inventory
 ```
 
 ## 📝 Version Control
