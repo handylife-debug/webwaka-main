@@ -1,12 +1,15 @@
 import { getAllAdminUsers, getActivityLog } from '@/lib/user-management';
+import { getCurrentUser } from '@/lib/auth-server';
+import { redirect } from 'next/navigation';
 import type { Metadata } from 'next';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Users, Shield, UserPlus, Activity, Clock } from 'lucide-react';
-import { rootDomain } from '@/lib/utils';
 import { AdminUsersTable } from '@/components/admin/admin-users-table';
 import { ActivityLogTable } from '@/components/admin/activity-log-table';
 import { UserManagementClient } from './user-management-client';
+
+const rootDomain = process.env.NEXT_PUBLIC_ROOT_DOMAIN || 'localhost:5000';
 
 export const metadata: Metadata = {
   title: `User Management | ${rootDomain}`,
@@ -14,6 +17,12 @@ export const metadata: Metadata = {
 };
 
 export default async function UsersPage() {
+  // Check if user has SuperAdmin permissions
+  const currentUser = await getCurrentUser();
+  if (!currentUser || currentUser.role !== 'SuperAdmin') {
+    redirect('/admin?error=insufficient_permissions');
+  }
+
   let users: Awaited<ReturnType<typeof getAllAdminUsers>> = [];
   let activities: Awaited<ReturnType<typeof getActivityLog>> = [];
   let error: string | null = null;

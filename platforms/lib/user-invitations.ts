@@ -1,7 +1,8 @@
 // Integration reference: blueprint:replitmail
 import { sendEmail } from './replitmail';
-import { generateInviteToken, AdminRole, logActivity } from './user-management';
-import { rootDomain } from './utils';
+import { generateInviteToken, AdminRole, logActivity, createAdminUser } from './user-management';
+
+const rootDomain = process.env.NEXT_PUBLIC_ROOT_DOMAIN || 'localhost:5000';
 
 export interface InvitationData {
   email: string;
@@ -14,9 +15,21 @@ export async function sendUserInvitation(
   email: string, 
   role: AdminRole, 
   invitedBy: string,
-  inviterName: string
+  inviterEmail: string
 ): Promise<{ success: boolean; error?: string }> {
   try {
+    // Check for existing user with this email to prevent duplicates
+    const { getAllAdminUsers } = await import('./user-management');
+    const existingUsers = await getAllAdminUsers();
+    const existingUser = existingUsers.find(user => user.email === email);
+    
+    if (existingUser) {
+      return { 
+        success: false, 
+        error: `User with email ${email} already exists` 
+      };
+    }
+
     // Generate invitation token
     const inviteToken = await generateInviteToken(email, role, invitedBy);
     
@@ -27,14 +40,25 @@ export async function sendUserInvitation(
     const emailResult = await sendEmail({
       to: email,
       subject: `Invitation to join ${rootDomain} as ${role}`,
-      html: createInvitationEmailHTML(email, role, inviterName, inviteUrl),
-      text: createInvitationEmailText(email, role, inviterName, inviteUrl),
+      html: createInvitationEmailHTML(email, role, inviterEmail, inviteUrl),
+      text: createInvitationEmailText(email, role, inviterEmail, inviteUrl),
     });
 
-    // Log the invitation activity
+    // Create pending user record
+    await createAdminUser({
+      email,
+      name: email.split('@')[0], // Use email prefix as temporary name
+      role,
+      status: 'Pending',
+      invitedBy,
+      inviteToken,
+      inviteExpiresAt: Date.now() + (7 * 24 * 60 * 60 * 1000), // 7 days
+    });
+
+    // Log the invitation activity with correct email
     await logActivity({
       userId: invitedBy,
-      userEmail: inviterName,
+      userEmail: inviterEmail,
       action: 'user_invited',
       targetType: 'user',
       targetId: email,

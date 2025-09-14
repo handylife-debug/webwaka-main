@@ -13,12 +13,17 @@ export async function sendUserInvitationAction(email: string, role: AdminRole) {
       return { success: false, error: 'Authentication required' };
     }
 
+    // Check if user has SuperAdmin permissions
+    if (currentUser.role !== 'SuperAdmin') {
+      return { success: false, error: 'Only SuperAdmin can invite new users' };
+    }
+
     // Send invitation
     const result = await sendUserInvitation(
       email, 
       role, 
       currentUser.id, 
-      currentUser.name
+      currentUser.email
     );
 
     if (result.success) {
@@ -48,6 +53,11 @@ export async function updateUserStatusAction(userId: string, status: UserStatus)
     const currentUser = await getCurrentUser();
     if (!currentUser) {
       return { success: false, error: 'Authentication required' };
+    }
+
+    // Check if user has SuperAdmin permissions
+    if (currentUser.role !== 'SuperAdmin') {
+      return { success: false, error: 'Only SuperAdmin can modify user status' };
     }
 
     // Update user status
