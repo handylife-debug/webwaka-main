@@ -1,7 +1,7 @@
 import { Suspense } from 'react';
 import { getCurrentUser } from '@/lib/auth-server';
 import { PartnerDashboard } from './dashboard';
-import { getPartnerCommissionStats, getPartnerByUserId, getPartnerByEmail } from '@/lib/partner-management';
+import { getPartnerDashboardMetrics, getPartnerByUserId, getPartnerByEmail } from '@/lib/partner-management';
 import type { Metadata } from 'next';
 import { rootDomain } from '@/lib/utils';
 
@@ -54,9 +54,9 @@ async function PartnerStatsWrapper() {
       );
     }
     
-    const commissionStats = await getPartnerCommissionStats(partnerId);
+    const dashboardMetrics = await getPartnerDashboardMetrics(partnerId);
     
-    return <PartnerDashboard user={user} commissionStats={commissionStats} />;
+    return <PartnerDashboard user={user} dashboardMetrics={dashboardMetrics} />;
   } catch (error) {
     console.error('Error loading partner dashboard:', error);
     return (

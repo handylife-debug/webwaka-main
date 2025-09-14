@@ -34,6 +34,11 @@ const navigation = [
     icon: DollarSign,
   },
   {
+    name: 'Reports',
+    href: '/partners/reports',
+    icon: BarChart3,
+  },
+  {
     name: 'Referrals',
     href: '/partners/referrals',
     icon: UserPlus,
@@ -41,7 +46,7 @@ const navigation = [
   {
     name: 'Analytics',
     href: '/partners/analytics',
-    icon: BarChart3,
+    icon: TrendingUp,
   },
   {
     name: 'Profile',

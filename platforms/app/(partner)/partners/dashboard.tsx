@@ -16,52 +16,63 @@ import {
 import { User } from '@/lib/auth';
 import Link from 'next/link';
 
-interface CommissionStats {
+interface DashboardMetrics {
   total_earnings: number;
-  pending_earnings: number;
-  paid_earnings: number;
-  total_transactions: number;
-  pending_transactions: number;
-  paid_transactions: number;
+  pending_payouts: number;
+  direct_referrals: number;
+  commission_stats: {
+    total_earnings: number;
+    pending_earnings: number;
+    paid_earnings: number;
+    total_transactions: number;
+    pending_transactions: number;
+    paid_transactions: number;
+  };
+  referral_stats: {
+    total_direct_referrals: number;
+    active_referrals: number;
+    converted_referrals: number;
+    this_month_referrals: number;
+  };
 }
 
 interface PartnerDashboardProps {
   user: User;
-  commissionStats: CommissionStats;
+  dashboardMetrics: DashboardMetrics;
 }
 
-function StatsCards({ stats }: { stats: CommissionStats }) {
+function StatsCards({ metrics }: { metrics: DashboardMetrics }) {
   const statsData = [
     {
       title: 'Total Earnings',
-      value: `$${stats.total_earnings.toFixed(2)}`,
+      value: `$${metrics.total_earnings.toFixed(2)}`,
       icon: DollarSign,
       color: 'text-green-600 bg-green-100',
-      change: '+12.5%',
+      change: `${metrics.commission_stats.total_transactions} transactions`,
       changeType: 'positive' as const,
     },
     {
-      title: 'Pending Earnings',
-      value: `$${stats.pending_earnings.toFixed(2)}`,
+      title: 'Pending Payouts',
+      value: `$${metrics.pending_payouts.toFixed(2)}`,
       icon: Clock,
       color: 'text-yellow-600 bg-yellow-100',
-      change: `${stats.pending_transactions} transactions`,
+      change: `${metrics.commission_stats.pending_transactions} pending`,
       changeType: 'neutral' as const,
     },
     {
-      title: 'This Month',
-      value: '$2,847',
-      icon: TrendingUp,
+      title: 'Direct Referrals',
+      value: `${metrics.direct_referrals}`,
+      icon: Users,
       color: 'text-blue-600 bg-blue-100',
-      change: '+8.2%',
+      change: `${metrics.referral_stats.this_month_referrals} this month`,
       changeType: 'positive' as const,
     },
     {
-      title: 'Active Referrals',
-      value: '24',
-      icon: Users,
+      title: 'Paid Earnings',
+      value: `$${metrics.commission_stats.paid_earnings.toFixed(2)}`,
+      icon: TrendingUp,
       color: 'text-purple-600 bg-purple-100',
-      change: '+3 this week',
+      change: `${metrics.commission_stats.paid_transactions} payouts`,
       changeType: 'positive' as const,
     },
   ];
@@ -235,7 +246,7 @@ function QuickActions() {
   );
 }
 
-export function PartnerDashboard({ user, commissionStats }: PartnerDashboardProps) {
+export function PartnerDashboard({ user, dashboardMetrics }: PartnerDashboardProps) {
   return (
     <div className="space-y-6">
       {/* Welcome Message */}
@@ -258,8 +269,8 @@ export function PartnerDashboard({ user, commissionStats }: PartnerDashboardProp
         </div>
       </div>
 
-      {/* Stats Cards */}
-      <StatsCards stats={commissionStats} />
+      {/* Key Metrics - Total Earnings, Pending Payouts, Direct Referrals */}
+      <StatsCards metrics={dashboardMetrics} />
 
       {/* Activity and Actions */}
       <div className="grid gap-6 lg:grid-cols-3">
