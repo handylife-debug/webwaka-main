@@ -2101,6 +2101,7 @@ export const TIME_CLOCK_ENTRIES_TABLE_SQL = `
     metadata JSONB DEFAULT '{}'::jsonb,
     
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     
     -- Multi-tenant constraints
     CONSTRAINT fk_time_clock_entries_tenant FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
@@ -2368,6 +2369,15 @@ export const CALCULATE_ATTENDANCE_HOURS_TRIGGER_SQL = `
     BEFORE INSERT OR UPDATE ON attendance_records
     FOR EACH ROW
     EXECUTE FUNCTION calculate_attendance_hours();
+`;
+
+// Time Clock Entries Triggers
+export const TIME_CLOCK_ENTRIES_TRIGGERS_SQL = `
+  DROP TRIGGER IF EXISTS trigger_update_time_clock_entries_updated_at ON time_clock_entries;
+  CREATE TRIGGER trigger_update_time_clock_entries_updated_at
+    BEFORE UPDATE ON time_clock_entries
+    FOR EACH ROW
+    EXECUTE FUNCTION update_updated_at_column();
 `;
 
 // Consolidated SQL exports for inventory management
