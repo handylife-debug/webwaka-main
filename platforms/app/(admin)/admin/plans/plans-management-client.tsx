@@ -1,0 +1,206 @@
+'use client';
+
+import { useState } from 'react';
+import { PlansDataTable } from '@/components/admin/plans-data-table';
+import { PlanForm } from '@/components/admin/plan-form';
+import { createPlanAction, updatePlanAction, updatePlanStatusAction } from './actions';
+import { SubscriptionPlan, CreatePlanData, PlanStatus } from '@/lib/plans-management';
+
+interface PlansManagementClientProps {
+  plans: SubscriptionPlan[];
+  currentUser: { id: string; email: string; role: string };
+}
+
+export function PlansManagementClient({ 
+  plans: initialPlans, 
+  currentUser 
+}: PlansManagementClientProps) {
+  const [plans, setPlans] = useState(initialPlans);
+  const [editingPlan, setEditingPlan] = useState<SubscriptionPlan | null>(null);
+  const [notification, setNotification] = useState<{
+    type: 'success' | 'error';
+    message: string;
+  } | null>(null);
+
+  const handleCreatePlan = async (data: CreatePlanData) => {
+    try {
+      const planData = { ...data, createdBy: currentUser.id };
+      const result = await createPlanAction(planData);
+      
+      if (result.success) {
+        // Add new plan to local state (or refetch)
+        setNotification({
+          type: 'success',
+          message: `Plan "${data.name}" created successfully`
+        });
+        
+        // Refresh the page to get updated data
+        window.location.reload();
+        
+        return { success: true };
+      } else {
+        setNotification({
+          type: 'error',
+          message: result.error || 'Failed to create plan'
+        });
+        return { success: false, error: result.error };
+      }
+    } catch (error) {
+      const errorMessage = 'An unexpected error occurred';
+      setNotification({
+        type: 'error',
+        message: errorMessage
+      });
+      return { success: false, error: errorMessage };
+    } finally {
+      // Clear notification after 4 seconds
+      setTimeout(() => setNotification(null), 4000);
+    }
+  };
+
+  const handleEditPlan = async (planId: string, data: Partial<CreatePlanData>) => {
+    try {
+      const result = await updatePlanAction(planId, data);
+      
+      if (result.success) {
+        // Update local state optimistically
+        setPlans(prev => 
+          prev.map(plan => 
+            plan.id === planId 
+              ? { ...plan, ...data, updatedAt: new Date() }
+              : plan
+          )
+        );
+        
+        setEditingPlan(null);
+        setNotification({
+          type: 'success',
+          message: 'Plan updated successfully'
+        });
+        
+        return { success: true };
+      } else {
+        setNotification({
+          type: 'error',
+          message: result.error || 'Failed to update plan'
+        });
+        return { success: false, error: result.error };
+      }
+    } catch (error) {
+      const errorMessage = 'An unexpected error occurred';
+      setNotification({
+        type: 'error',
+        message: errorMessage
+      });
+      return { success: false, error: errorMessage };
+    } finally {
+      // Clear notification after 3 seconds
+      setTimeout(() => setNotification(null), 3000);
+    }
+  };
+
+  const handleStatusChange = async (planId: string, status: PlanStatus) => {
+    try {
+      const result = await updatePlanStatusAction(planId, status);
+      
+      if (result.success) {
+        // Update local state optimistically
+        setPlans(prev => 
+          prev.map(plan => 
+            plan.id === planId 
+              ? { ...plan, status, updatedAt: new Date() }
+              : plan
+          )
+        );
+        
+        setNotification({
+          type: 'success',
+          message: result.message || 'Plan status updated successfully'
+        });
+      } else {
+        setNotification({
+          type: 'error',
+          message: result.error || 'Failed to update plan status'
+        });
+      }
+    } catch (error) {
+      setNotification({
+        type: 'error',
+        message: 'An unexpected error occurred'
+      });
+    } finally {
+      // Clear notification after 3 seconds
+      setTimeout(() => setNotification(null), 3000);
+    }
+  };
+
+  const handleEditClick = (plan: SubscriptionPlan) => {
+    setEditingPlan(plan);
+  };
+
+  const handleViewDetails = (plan: SubscriptionPlan) => {
+    const featuresText = plan.features.map(f => 
+      `• ${f.name}${f.limit ? ` (${f.limit} limit)` : ''}: ${f.included ? 'Included' : 'Not included'}`
+    ).join('\n');
+    
+    const limitsText = Object.entries(plan.limits).map(([key, value]) => 
+      `• ${key}: ${value}`
+    ).join('\n');
+
+    alert(`Plan Details:\n\nName: ${plan.name}\nDescription: ${plan.description || 'No description'}\nPrice: ₦${plan.price.toLocaleString()}/${plan.interval}\nStatus: ${plan.status}\nTrial Days: ${plan.trialDays || 0}\nPopular: ${plan.isPopular ? 'Yes' : 'No'}\n\nFeatures:\n${featuresText}\n\nLimits:\n${limitsText}\n\nCreated: ${plan.createdAt.toLocaleDateString()}\nUpdated: ${plan.updatedAt.toLocaleDateString()}`);
+  };
+
+  return (
+    <>
+      <div className="space-y-6">
+        {/* Create/Edit Plan Form */}
+        <div className="flex justify-between items-center">
+          <div>
+            <h3 className="text-lg font-medium">Subscription Plans</h3>
+            <p className="text-sm text-gray-600">
+              Manage your pricing plans with features and limits.
+            </p>
+          </div>
+          <div className="flex gap-2">
+            {editingPlan && (
+              <PlanForm 
+                editingPlan={editingPlan}
+                onEdit={handleEditPlan}
+                onSubmit={handleCreatePlan}
+              />
+            )}
+            {!editingPlan && (
+              <PlanForm onSubmit={handleCreatePlan} />
+            )}
+          </div>
+        </div>
+
+        {/* Plans Table */}
+        <PlansDataTable 
+          plans={plans}
+          onStatusChange={handleStatusChange}
+          onEdit={handleEditClick}
+          onViewDetails={handleViewDetails}
+        />
+      </div>
+
+      {/* Notification Toast */}
+      {notification && (
+        <div className={`fixed bottom-4 right-4 p-4 rounded-lg shadow-lg max-w-sm z-50 ${
+          notification.type === 'success' 
+            ? 'bg-green-50 border border-green-200 text-green-800'
+            : 'bg-red-50 border border-red-200 text-red-800'
+        }`}>
+          <div className="flex">
+            <div className="ml-3">
+              <h3 className="text-sm font-medium">
+                {notification.type === 'success' ? 'Success' : 'Error'}
+              </h3>
+              <div className="text-sm mt-1">{notification.message}</div>
+            </div>
+          </div>
+        </div>
+      )}
+    </>
+  );
+}
