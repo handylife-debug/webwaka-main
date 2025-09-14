@@ -198,6 +198,9 @@ const nextConfig: NextConfig = {
   experimental: {
     // Enable experimental features if needed
   },
+  // Configure for Replit environment
+  hostname: '0.0.0.0',
+  allowedHosts: ['*'],
   // Ensure proper handling of Vercel Analytics and Speed Insights
   headers: async () => {
     return [
@@ -216,6 +219,15 @@ const nextConfig: NextConfig = {
           {
             key: 'Cache-Control',
             value: 'public, max-age=0, must-revalidate',
+          },
+        ],
+      },
+      {
+        source: '/(.*)',
+        headers: [
+          {
+            key: 'Cache-Control',
+            value: 'no-cache, no-store, must-revalidate',
           },
         ],
       },
