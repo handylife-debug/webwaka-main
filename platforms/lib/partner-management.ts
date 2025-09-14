@@ -4,27 +4,23 @@ import { execute_sql } from '@/lib/database';
 
 export interface PartnerLevel {
   id: string;
+  tenant_id: string;
   level_name: string;
   level_code: string;
   description?: string;
   default_commission_rate: number;
-  minimum_commission_rate: number;
-  maximum_commission_rate: number;
-  minimum_referrals: number;
-  minimum_revenue: number;
-  minimum_active_referrals: number;
+  min_commission_rate: number;
+  max_commission_rate: number;
+  min_downline_count: number;
+  min_volume_requirement: number;
   benefits: string[];
-  permissions: string[];
-  can_auto_upgrade: boolean;
-  requires_approval: boolean;
-  marketing_materials: Record<string, any>;
+  requirements: string[];
   level_order: number;
-  is_active: boolean;
-  max_referral_depth: number; // New field for referral depth
+  status: string;
+  max_referral_depth: number;
   created_at: string;
   updated_at: string;
   created_by: string;
-  updated_by?: string;
 }
 
 export interface CreatePartnerLevelData {
@@ -32,19 +28,15 @@ export interface CreatePartnerLevelData {
   level_code: string;
   description?: string;
   default_commission_rate: number;
-  minimum_commission_rate?: number;
-  maximum_commission_rate?: number;
-  minimum_referrals?: number;
-  minimum_revenue?: number;
-  minimum_active_referrals?: number;
+  min_commission_rate?: number;
+  max_commission_rate?: number;
+  min_downline_count?: number;
+  min_volume_requirement?: number;
   benefits?: string[];
-  permissions?: string[];
-  can_auto_upgrade?: boolean;
-  requires_approval?: boolean;
-  marketing_materials?: Record<string, any>;
+  requirements?: string[];
   level_order: number;
-  is_active?: boolean;
-  max_referral_depth: number; // Required field for referral depth
+  status?: string;
+  max_referral_depth: number;
   createdBy: string;
 }
 
@@ -53,23 +45,19 @@ export interface UpdatePartnerLevelData {
   level_code?: string;
   description?: string;
   default_commission_rate?: number;
-  minimum_commission_rate?: number;
-  maximum_commission_rate?: number;
-  minimum_referrals?: number;
-  minimum_revenue?: number;
-  minimum_active_referrals?: number;
+  min_commission_rate?: number;
+  max_commission_rate?: number;
+  min_downline_count?: number;
+  min_volume_requirement?: number;
   benefits?: string[];
-  permissions?: string[];
-  can_auto_upgrade?: boolean;
-  requires_approval?: boolean;
-  marketing_materials?: Record<string, any>;
+  requirements?: string[];
   level_order?: number;
-  is_active?: boolean;
+  status?: string;
   max_referral_depth?: number;
   updatedBy?: string;
 }
 
-export type PartnerLevelStatus = 'active' | 'inactive';
+export type PartnerLevelStatus = 'active' | 'inactive' | 'archived';
 
 /**
  * Initialize partner tables if they don't exist
@@ -110,11 +98,10 @@ export async function getAllPartnerLevels(): Promise<PartnerLevel[]> {
     const result = await execute_sql(`
       SELECT 
         id, level_name, level_code, description,
-        default_commission_rate, minimum_commission_rate, maximum_commission_rate,
-        minimum_referrals, minimum_revenue, minimum_active_referrals,
-        benefits, permissions, can_auto_upgrade, requires_approval,
-        marketing_materials, level_order, is_active, max_referral_depth,
-        created_at, updated_at, created_by, updated_by
+        default_commission_rate, min_commission_rate, max_commission_rate,
+        min_downline_count, min_volume_requirement, benefits, requirements,
+        level_order, status, max_referral_depth,
+        created_at, updated_at, created_by
       FROM partner_levels 
       ORDER BY level_order ASC, created_at DESC;
     `);
@@ -122,12 +109,11 @@ export async function getAllPartnerLevels(): Promise<PartnerLevel[]> {
     return result.rows.map((row: any) => ({
       ...row,
       default_commission_rate: parseFloat(row.default_commission_rate),
-      minimum_commission_rate: parseFloat(row.minimum_commission_rate),
-      maximum_commission_rate: parseFloat(row.maximum_commission_rate),
-      minimum_revenue: parseFloat(row.minimum_revenue),
+      min_commission_rate: parseFloat(row.min_commission_rate),
+      max_commission_rate: parseFloat(row.max_commission_rate),
+      min_volume_requirement: parseFloat(row.min_volume_requirement),
       benefits: row.benefits || [],
-      permissions: row.permissions || [],
-      marketing_materials: row.marketing_materials || {},
+      requirements: row.requirements || [],
       max_referral_depth: parseInt(row.max_referral_depth) || 1,
     }));
   } catch (error) {
@@ -144,11 +130,10 @@ export async function getPartnerLevel(levelId: string): Promise<PartnerLevel | n
     const result = await execute_sql(`
       SELECT 
         id, level_name, level_code, description,
-        default_commission_rate, minimum_commission_rate, maximum_commission_rate,
-        minimum_referrals, minimum_revenue, minimum_active_referrals,
-        benefits, permissions, can_auto_upgrade, requires_approval,
-        marketing_materials, level_order, is_active, max_referral_depth,
-        created_at, updated_at, created_by, updated_by
+        default_commission_rate, min_commission_rate, max_commission_rate,
+        min_downline_count, min_volume_requirement, benefits, requirements,
+        level_order, status, max_referral_depth,
+        created_at, updated_at, created_by
       FROM partner_levels 
       WHERE id = $1;
     `, [levelId]);
@@ -159,12 +144,11 @@ export async function getPartnerLevel(levelId: string): Promise<PartnerLevel | n
     return {
       ...row,
       default_commission_rate: parseFloat(row.default_commission_rate),
-      minimum_commission_rate: parseFloat(row.minimum_commission_rate),
-      maximum_commission_rate: parseFloat(row.maximum_commission_rate),
-      minimum_revenue: parseFloat(row.minimum_revenue),
+      min_commission_rate: parseFloat(row.min_commission_rate),
+      max_commission_rate: parseFloat(row.max_commission_rate),
+      min_volume_requirement: parseFloat(row.min_volume_requirement),
       benefits: row.benefits || [],
-      permissions: row.permissions || [],
-      marketing_materials: row.marketing_materials || {},
+      requirements: row.requirements || [],
       max_referral_depth: parseInt(row.max_referral_depth) || 1,
     };
   } catch (error) {
@@ -181,30 +165,25 @@ export async function createPartnerLevel(levelData: CreatePartnerLevelData): Pro
     const result = await execute_sql(`
       INSERT INTO partner_levels (
         level_name, level_code, description, default_commission_rate,
-        minimum_commission_rate, maximum_commission_rate,
-        minimum_referrals, minimum_revenue, minimum_active_referrals,
-        benefits, permissions, can_auto_upgrade, requires_approval,
-        marketing_materials, level_order, is_active, max_referral_depth,
+        min_commission_rate, max_commission_rate,
+        min_downline_count, min_volume_requirement,
+        benefits, requirements, level_order, status, max_referral_depth,
         created_by
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
       RETURNING id;
     `, [
       levelData.level_name,
       levelData.level_code,
       levelData.description || null,
       levelData.default_commission_rate,
-      levelData.minimum_commission_rate || 0.0000,
-      levelData.maximum_commission_rate || 1.0000,
-      levelData.minimum_referrals || 0,
-      levelData.minimum_revenue || 0.00,
-      levelData.minimum_active_referrals || 0,
+      levelData.min_commission_rate || 0.0000,
+      levelData.max_commission_rate || 1.0000,
+      levelData.min_downline_count || 0,
+      levelData.min_volume_requirement || 0.00,
       JSON.stringify(levelData.benefits || []),
-      JSON.stringify(levelData.permissions || []),
-      levelData.can_auto_upgrade !== false,
-      levelData.requires_approval || false,
-      JSON.stringify(levelData.marketing_materials || {}),
+      JSON.stringify(levelData.requirements || []),
       levelData.level_order,
-      levelData.is_active !== false,
+      levelData.status || 'active',
       levelData.max_referral_depth,
       levelData.createdBy
     ]);
@@ -255,61 +234,41 @@ export async function updatePartnerLevel(levelId: string, updates: UpdatePartner
       setClauses.push(`default_commission_rate = $${paramCounter++}`);
       values.push(updates.default_commission_rate);
     }
-    if (updates.minimum_commission_rate !== undefined) {
-      setClauses.push(`minimum_commission_rate = $${paramCounter++}`);
-      values.push(updates.minimum_commission_rate);
+    if (updates.min_commission_rate !== undefined) {
+      setClauses.push(`min_commission_rate = $${paramCounter++}`);
+      values.push(updates.min_commission_rate);
     }
-    if (updates.maximum_commission_rate !== undefined) {
-      setClauses.push(`maximum_commission_rate = $${paramCounter++}`);
-      values.push(updates.maximum_commission_rate);
+    if (updates.max_commission_rate !== undefined) {
+      setClauses.push(`max_commission_rate = $${paramCounter++}`);
+      values.push(updates.max_commission_rate);
     }
-    if (updates.minimum_referrals !== undefined) {
-      setClauses.push(`minimum_referrals = $${paramCounter++}`);
-      values.push(updates.minimum_referrals);
+    if (updates.min_downline_count !== undefined) {
+      setClauses.push(`min_downline_count = $${paramCounter++}`);
+      values.push(updates.min_downline_count);
     }
-    if (updates.minimum_revenue !== undefined) {
-      setClauses.push(`minimum_revenue = $${paramCounter++}`);
-      values.push(updates.minimum_revenue);
-    }
-    if (updates.minimum_active_referrals !== undefined) {
-      setClauses.push(`minimum_active_referrals = $${paramCounter++}`);
-      values.push(updates.minimum_active_referrals);
+    if (updates.min_volume_requirement !== undefined) {
+      setClauses.push(`min_volume_requirement = $${paramCounter++}`);
+      values.push(updates.min_volume_requirement);
     }
     if (updates.benefits !== undefined) {
       setClauses.push(`benefits = $${paramCounter++}`);
       values.push(JSON.stringify(updates.benefits));
     }
-    if (updates.permissions !== undefined) {
-      setClauses.push(`permissions = $${paramCounter++}`);
-      values.push(JSON.stringify(updates.permissions));
-    }
-    if (updates.can_auto_upgrade !== undefined) {
-      setClauses.push(`can_auto_upgrade = $${paramCounter++}`);
-      values.push(updates.can_auto_upgrade);
-    }
-    if (updates.requires_approval !== undefined) {
-      setClauses.push(`requires_approval = $${paramCounter++}`);
-      values.push(updates.requires_approval);
-    }
-    if (updates.marketing_materials !== undefined) {
-      setClauses.push(`marketing_materials = $${paramCounter++}`);
-      values.push(JSON.stringify(updates.marketing_materials));
+    if (updates.requirements !== undefined) {
+      setClauses.push(`requirements = $${paramCounter++}`);
+      values.push(JSON.stringify(updates.requirements));
     }
     if (updates.level_order !== undefined) {
       setClauses.push(`level_order = $${paramCounter++}`);
       values.push(updates.level_order);
     }
-    if (updates.is_active !== undefined) {
-      setClauses.push(`is_active = $${paramCounter++}`);
-      values.push(updates.is_active);
+    if (updates.status !== undefined) {
+      setClauses.push(`status = $${paramCounter++}`);
+      values.push(updates.status);
     }
     if (updates.max_referral_depth !== undefined) {
       setClauses.push(`max_referral_depth = $${paramCounter++}`);
       values.push(updates.max_referral_depth);
-    }
-    if (updates.updatedBy !== undefined) {
-      setClauses.push(`updated_by = $${paramCounter++}`);
-      values.push(updates.updatedBy);
     }
 
     if (setClauses.length === 0) {
@@ -375,12 +334,11 @@ export async function deletePartnerLevel(levelId: string): Promise<boolean> {
  */
 export async function updatePartnerLevelStatus(levelId: string, status: PartnerLevelStatus): Promise<boolean> {
   try {
-    const isActive = status === 'active';
     const result = await execute_sql(`
       UPDATE partner_levels 
-      SET is_active = $1, updated_at = CURRENT_TIMESTAMP
+      SET status = $1, updated_at = CURRENT_TIMESTAMP
       WHERE id = $2;
-    `, [isActive, levelId]);
+    `, [status, levelId]);
 
     return result.rowCount > 0;
   } catch (error) {
@@ -401,8 +359,8 @@ export async function getPartnerLevelStats(): Promise<{
     const result = await execute_sql(`
       SELECT 
         COUNT(*) as total,
-        COUNT(CASE WHEN is_active = true THEN 1 END) as active,
-        COUNT(CASE WHEN is_active = false THEN 1 END) as inactive
+        COUNT(CASE WHEN status = 'active' THEN 1 END) as active,
+        COUNT(CASE WHEN status = 'inactive' THEN 1 END) as inactive
       FROM partner_levels;
     `);
 

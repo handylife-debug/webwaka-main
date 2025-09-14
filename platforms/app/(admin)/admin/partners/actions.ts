@@ -2,7 +2,7 @@
 
 import { revalidatePath } from 'next/cache';
 import { getCurrentUser } from '@/lib/auth-server';
-import { logActivity } from '@/lib/activity-logger';
+import { logActivity } from '@/lib/user-management';
 import { 
   createPartnerLevel, 
   updatePartnerLevel, 

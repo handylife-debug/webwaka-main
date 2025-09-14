@@ -31,6 +31,7 @@ import {
 } from 'lucide-react';
 import { PartnerLevel, PartnerLevelStatus } from '@/lib/partner-management';
 import { updatePartnerLevelStatusAction, deletePartnerLevelAction } from '@/app/(admin)/admin/partners/actions';
+import { EditPartnerLevelDialog } from './edit-partner-level-dialog';
 
 interface PartnerLevelsTableProps {
   partnerLevels: PartnerLevel[];
@@ -83,40 +84,33 @@ export function PartnerLevelsTable({ partnerLevels }: PartnerLevelsTableProps) {
     }
   };
 
-  const handleEdit = (level: PartnerLevel) => {
-    // TODO: Implement edit functionality
-    alert(`Edit partner level: ${level.level_name} (Feature coming soon)`);
-  };
 
   const handleViewDetails = (level: PartnerLevel) => {
     const benefitsText = level.benefits.length > 0 
       ? level.benefits.map(b => `• ${b}`).join('\n')
       : 'No specific benefits defined';
     
-    const permissionsText = level.permissions.length > 0
-      ? level.permissions.map(p => `• ${p}`).join('\n')
-      : 'No specific permissions defined';
+    const requirementsText = level.requirements.length > 0
+      ? level.requirements.map(r => `• ${r}`).join('\n')
+      : 'No specific requirements defined';
     
     const details = [
       `Partner Level: ${level.level_name} (${level.level_code})`,
       `Description: ${level.description || 'No description'}`,
       `Commission Rate: ${formatCommissionRate(level.default_commission_rate)}`,
-      `Rate Range: ${formatCommissionRate(level.minimum_commission_rate)} - ${formatCommissionRate(level.maximum_commission_rate)}`,
+      `Rate Range: ${formatCommissionRate(level.min_commission_rate)} - ${formatCommissionRate(level.max_commission_rate)}`,
       `Max Referral Depth: ${level.max_referral_depth} levels`,
       `Level Order: ${level.level_order}`,
       `Minimum Requirements:`,
-      `  • Referrals: ${level.minimum_referrals}`,
-      `  • Revenue: ₦${level.minimum_revenue.toLocaleString()}`,
-      `  • Active Referrals: ${level.minimum_active_referrals}`,
-      `Auto-upgrade: ${level.can_auto_upgrade ? 'Yes' : 'No'}`,
-      `Requires Approval: ${level.requires_approval ? 'Yes' : 'No'}`,
-      `Status: ${level.is_active ? 'Active' : 'Inactive'}`,
+      `  • Downline Count: ${level.min_downline_count}`,
+      `  • Volume Requirement: ₦${level.min_volume_requirement.toLocaleString()}`,
+      `Status: ${level.status === 'active' ? 'Active' : 'Inactive'}`,
       ``,
       `Benefits:`,
       benefitsText,
       ``,
-      `Permissions:`,
-      permissionsText,
+      `Requirements:`,
+      requirementsText,
     ].join('\n');
     
     alert(details);
@@ -183,7 +177,7 @@ export function PartnerLevelsTable({ partnerLevels }: PartnerLevelsTableProps) {
                   </span>
                 </div>
                 <div className="text-xs text-muted-foreground">
-                  Range: {formatCommissionRate(level.minimum_commission_rate)} - {formatCommissionRate(level.maximum_commission_rate)}
+                  Range: {formatCommissionRate(level.min_commission_rate)} - {formatCommissionRate(level.max_commission_rate)}
                 </div>
               </TableCell>
               
@@ -197,18 +191,17 @@ export function PartnerLevelsTable({ partnerLevels }: PartnerLevelsTableProps) {
               
               <TableCell>
                 <div className="text-sm space-y-1">
-                  <div>Referrals: {level.minimum_referrals}</div>
-                  <div>Revenue: ₦{level.minimum_revenue.toLocaleString()}</div>
-                  <div>Active: {level.minimum_active_referrals}</div>
+                  <div>Downline: {level.min_downline_count}</div>
+                  <div>Volume: ₦{level.min_volume_requirement.toLocaleString()}</div>
                 </div>
               </TableCell>
               
               <TableCell>
                 <Badge 
                   variant="outline" 
-                  className={getStatusColor(level.is_active)}
+                  className={getStatusColor(level.status === 'active')}
                 >
-                  {level.is_active ? 'Active' : 'Inactive'}
+                  {level.status === 'active' ? 'Active' : 'Inactive'}
                 </Badge>
               </TableCell>
               
@@ -233,15 +226,17 @@ export function PartnerLevelsTable({ partnerLevels }: PartnerLevelsTableProps) {
                       View Details
                     </DropdownMenuItem>
                     
-                    <DropdownMenuItem onClick={() => handleEdit(level)}>
-                      <Edit className="mr-2 h-4 w-4" />
-                      Edit Level
-                    </DropdownMenuItem>
+                    <EditPartnerLevelDialog partnerLevel={level}>
+                      <DropdownMenuItem onSelect={(e) => e.preventDefault()}>
+                        <Edit className="mr-2 h-4 w-4" />
+                        Edit Level
+                      </DropdownMenuItem>
+                    </EditPartnerLevelDialog>
                     
                     <DropdownMenuItem 
-                      onClick={() => handleStatusChange(level.id, !level.is_active)}
+                      onClick={() => handleStatusChange(level.id, level.status !== 'active')}
                     >
-                      {level.is_active ? (
+                      {level.status === 'active' ? (
                         <>
                           <Pause className="mr-2 h-4 w-4" />
                           Deactivate

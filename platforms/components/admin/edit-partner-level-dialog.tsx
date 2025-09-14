@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import {
   Dialog,
   DialogContent,
@@ -15,15 +15,16 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Switch } from '@/components/ui/switch';
-import { Loader2, Plus } from 'lucide-react';
-import { createPartnerLevelAction } from '@/app/(admin)/admin/partners/actions';
-import { CreatePartnerLevelData } from '@/lib/partner-management';
+import { Loader2, Save } from 'lucide-react';
+import { updatePartnerLevelAction } from '@/app/(admin)/admin/partners/actions';
+import { PartnerLevel, UpdatePartnerLevelData } from '@/lib/partner-management';
 
-interface CreatePartnerLevelDialogProps {
+interface EditPartnerLevelDialogProps {
+  partnerLevel: PartnerLevel;
   children: React.ReactNode;
 }
 
-export function CreatePartnerLevelDialog({ children }: CreatePartnerLevelDialogProps) {
+export function EditPartnerLevelDialog({ partnerLevel, children }: EditPartnerLevelDialogProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -32,9 +33,9 @@ export function CreatePartnerLevelDialog({ children }: CreatePartnerLevelDialogP
     level_name: '',
     level_code: '',
     description: '',
-    default_commission_rate: 0.10, // 10%
-    min_commission_rate: 0.05, // 5%
-    max_commission_rate: 0.25, // 25%
+    default_commission_rate: 0.10,
+    min_commission_rate: 0.05,
+    max_commission_rate: 0.25,
     min_downline_count: 0,
     min_volume_requirement: 0,
     level_order: 1,
@@ -43,6 +44,27 @@ export function CreatePartnerLevelDialog({ children }: CreatePartnerLevelDialogP
     benefits: '',
     requirements: '',
   });
+
+  // Pre-populate form when dialog opens or partner level changes
+  useEffect(() => {
+    if (partnerLevel) {
+      setFormData({
+        level_name: partnerLevel.level_name,
+        level_code: partnerLevel.level_code,
+        description: partnerLevel.description || '',
+        default_commission_rate: partnerLevel.default_commission_rate,
+        min_commission_rate: partnerLevel.min_commission_rate,
+        max_commission_rate: partnerLevel.max_commission_rate,
+        min_downline_count: partnerLevel.min_downline_count,
+        min_volume_requirement: partnerLevel.min_volume_requirement,
+        level_order: partnerLevel.level_order,
+        max_referral_depth: partnerLevel.max_referral_depth,
+        status: partnerLevel.status,
+        benefits: partnerLevel.benefits.join('\n'),
+        requirements: partnerLevel.requirements.join('\n'),
+      });
+    }
+  }, [partnerLevel]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -81,7 +103,7 @@ export function CreatePartnerLevelDialog({ children }: CreatePartnerLevelDialogP
         ? formData.requirements.split('\n').map(r => r.trim()).filter(r => r.length > 0)
         : [];
 
-      const levelData: CreatePartnerLevelData = {
+      const updateData: UpdatePartnerLevelData = {
         level_name: formData.level_name.trim(),
         level_code: formData.level_code.trim().toUpperCase(),
         description: formData.description.trim() || undefined,
@@ -95,31 +117,14 @@ export function CreatePartnerLevelDialog({ children }: CreatePartnerLevelDialogP
         status: formData.status,
         benefits,
         requirements,
-        createdBy: 'system' // Will be overridden by server action
       };
 
-      const result = await createPartnerLevelAction(levelData);
+      const result = await updatePartnerLevelAction(partnerLevel.id, updateData);
       
       if (result.success) {
         setIsOpen(false);
-        // Reset form
-        setFormData({
-          level_name: '',
-          level_code: '',
-          description: '',
-          default_commission_rate: 0.10,
-          min_commission_rate: 0.05,
-          max_commission_rate: 0.25,
-          min_downline_count: 0,
-          min_volume_requirement: 0,
-          level_order: 1,
-          max_referral_depth: 3,
-          status: 'active',
-          benefits: '',
-          requirements: '',
-        });
       } else {
-        setError(result.error || 'Failed to create partner level');
+        setError(result.error || 'Failed to update partner level');
       }
     } catch (error) {
       setError('An unexpected error occurred');
@@ -139,9 +144,9 @@ export function CreatePartnerLevelDialog({ children }: CreatePartnerLevelDialogP
       </DialogTrigger>
       <DialogContent className="sm:max-w-[600px] max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>Create Partner Level</DialogTitle>
+          <DialogTitle>Edit Partner Level</DialogTitle>
           <DialogDescription>
-            Define a new tier in your partnership program with commission rates and referral depth.
+            Modify the details and settings for the "{partnerLevel.level_name}" partner level.
           </DialogDescription>
         </DialogHeader>
         
@@ -368,12 +373,12 @@ export function CreatePartnerLevelDialog({ children }: CreatePartnerLevelDialogP
               {isLoading ? (
                 <>
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Creating...
+                  Saving...
                 </>
               ) : (
                 <>
-                  <Plus className="mr-2 h-4 w-4" />
-                  Create Level
+                  <Save className="mr-2 h-4 w-4" />
+                  Save Changes
                 </>
               )}
             </Button>
