@@ -55,6 +55,9 @@ export interface UpdatePlanData {
 // Initialize database tables
 export async function initializePlansTables(): Promise<void> {
   try {
+    // Ensure pgcrypto extension is available for UUID generation
+    await execute_sql(`CREATE EXTENSION IF NOT EXISTS pgcrypto;`);
+    
     // Create plans table
     await execute_sql(`
       CREATE TABLE IF NOT EXISTS subscription_plans (
@@ -114,8 +117,14 @@ export async function createPlan(planData: CreatePlanData): Promise<string> {
     ]);
 
     return result.rows[0].id;
-  } catch (error) {
+  } catch (error: any) {
     console.error('Error creating plan:', error);
+    
+    // Handle unique constraint violation for plan name
+    if (error.code === '23505' && error.constraint === 'subscription_plans_name_key') {
+      throw new Error('A plan with this name already exists');
+    }
+    
     throw new Error('Failed to create subscription plan');
   }
 }
@@ -128,7 +137,7 @@ export async function getAllPlans(): Promise<SubscriptionPlan[]> {
       ORDER BY created_at DESC;
     `);
 
-    return result.rows.map(row => ({
+    return result.rows.map((row: any) => ({
       id: row.id,
       name: row.name,
       description: row.description,
@@ -206,7 +215,7 @@ export async function updatePlan(planId: string, updates: UpdatePlanData): Promi
       values.push(updates.interval);
     }
     if (updates.features !== undefined) {
-      const features = updates.features.map((feature, index) => ({
+      const features = updates.features.map((feature: any, index) => ({
         ...feature,
         id: feature.id || `feature_${Date.now()}_${index}`
       }));

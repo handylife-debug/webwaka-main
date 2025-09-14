@@ -75,7 +75,7 @@ export function PlanForm({ onSubmit, editingPlan, onEdit }: PlanFormProps) {
   
   const [error, setError] = useState<string | null>(null);
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     
     if (!formData.name || !formData.price) {

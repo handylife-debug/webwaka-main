@@ -18,10 +18,19 @@ export async function createPlanAction(planData: CreatePlanData) {
       return { success: false, error: 'Only SuperAdmin can create plans' };
     }
 
-    // Create the plan
+    // Validate plan data server-side
+    if (!planData.name || planData.name.trim().length === 0) {
+      return { success: false, error: 'Plan name is required' };
+    }
+    if (planData.price < 0) {
+      return { success: false, error: 'Price must be non-negative' };
+    }
+
+    // Create the plan (ignore client-provided createdBy)
     const planId = await createPlan({
       ...planData,
-      createdBy: currentUser.id
+      createdBy: currentUser.id, // Always use server-authenticated user
+      name: planData.name.trim()
     });
 
     // Log the activity

@@ -24,8 +24,9 @@ export function PlansManagementClient({
 
   const handleCreatePlan = async (data: CreatePlanData) => {
     try {
-      const planData = { ...data, createdBy: currentUser.id };
-      const result = await createPlanAction(planData);
+      // Remove createdBy from client data - server will set it from auth
+      const { createdBy, ...planData } = data;
+      const result = await createPlanAction(planData as CreatePlanData);
       
       if (result.success) {
         // Add new plan to local state (or refetch)
