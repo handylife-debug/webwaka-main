@@ -6,8 +6,6 @@ import { Button } from '@/components/ui/button';
 import { 
   CheckCircle, 
   XCircle, 
-  Eye, 
-  EyeOff, 
   Copy, 
   AlertTriangle,
   Settings,
@@ -27,14 +25,6 @@ export function CredentialsStatusCard({
   credentials, 
   onRefresh 
 }: CredentialsStatusCardProps) {
-  const [showValues, setShowValues] = useState<Record<string, boolean>>({});
-
-  const toggleValueVisibility = (key: string) => {
-    setShowValues(prev => ({
-      ...prev,
-      [key]: !prev[key]
-    }));
-  };
 
   const copyToClipboard = (text: string) => {
     navigator.clipboard.writeText(text);
@@ -134,24 +124,10 @@ export function CredentialsStatusCard({
               <div className="flex items-center gap-2">
                 {credential.isSet ? (
                   <div className="flex items-center gap-2">
+                    <CheckCircle className="h-4 w-4 text-green-600" />
                     <span className="text-sm text-green-700 font-medium">
-                      {showValues[key] && process.env[credential.key] 
-                        ? process.env[credential.key]
-                        : '••••••••'
-                      }
+                      Configured
                     </span>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="h-6 w-6 p-0"
-                      onClick={() => toggleValueVisibility(key)}
-                    >
-                      {showValues[key] ? (
-                        <EyeOff className="h-3 w-3" />
-                      ) : (
-                        <Eye className="h-3 w-3" />
-                      )}
-                    </Button>
                   </div>
                 ) : (
                   <div className="flex items-center gap-2">

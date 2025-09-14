@@ -113,8 +113,9 @@ export function getCredentialsStatus(): CredentialsStatus {
 }
 
 /**
- * Get masked version of a credential for display purposes
+ * Get masked version of a credential for display purposes (server-side only)
  * Shows first 4 and last 4 characters with asterisks in between
+ * Note: This should only be called on the server side where env vars are available
  */
 export function getMaskedCredential(value: string): string {
   if (!value || value.length < 8) {
