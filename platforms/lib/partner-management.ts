@@ -1384,3 +1384,257 @@ export async function getPartnerCommissionStats(partnerId: string): Promise<{
     };
   }
 }
+
+/**
+ * Get referral statistics for a partner
+ */
+export async function getPartnerReferralStats(partnerId: string): Promise<{
+  total_direct_referrals: number;
+  active_referrals: number;
+  converted_referrals: number;
+  this_month_referrals: number;
+}> {
+  try {
+    const tenantId = await getCurrentTenantId();
+    if (!tenantId) {
+      throw new Error('Unable to determine tenant context');
+    }
+
+    // Get direct referrals (partners where this partner is the sponsor)
+    const result = await execute_sql(`
+      SELECT 
+        COUNT(*) as total_direct_referrals,
+        COUNT(CASE WHEN status = 'active' THEN 1 END) as active_referrals,
+        COUNT(CASE WHEN status = 'active' AND partner_level_id IS NOT NULL THEN 1 END) as converted_referrals,
+        COUNT(CASE WHEN created_at >= DATE_TRUNC('month', CURRENT_DATE) THEN 1 END) as this_month_referrals
+      FROM partners
+      WHERE tenant_id = $1 AND sponsor_partner_id = $2;
+    `, [tenantId, partnerId]);
+
+    const stats = result.rows[0];
+    return {
+      total_direct_referrals: parseInt(stats.total_direct_referrals) || 0,
+      active_referrals: parseInt(stats.active_referrals) || 0,
+      converted_referrals: parseInt(stats.converted_referrals) || 0,
+      this_month_referrals: parseInt(stats.this_month_referrals) || 0,
+    };
+  } catch (error) {
+    console.error('Error getting partner referral stats:', error);
+    return {
+      total_direct_referrals: 0,
+      active_referrals: 0,
+      converted_referrals: 0,
+      this_month_referrals: 0,
+    };
+  }
+}
+
+/**
+ * Get comprehensive partner dashboard metrics
+ */
+export async function getPartnerDashboardMetrics(partnerId: string): Promise<{
+  total_earnings: number;
+  pending_payouts: number;
+  direct_referrals: number;
+  commission_stats: {
+    total_earnings: number;
+    pending_earnings: number;
+    paid_earnings: number;
+    total_transactions: number;
+    pending_transactions: number;
+    paid_transactions: number;
+  };
+  referral_stats: {
+    total_direct_referrals: number;
+    active_referrals: number;
+    converted_referrals: number;
+    this_month_referrals: number;
+  };
+}> {
+  try {
+    // Get both commission and referral stats
+    const [commissionStats, referralStats] = await Promise.all([
+      getPartnerCommissionStats(partnerId),
+      getPartnerReferralStats(partnerId)
+    ]);
+
+    return {
+      total_earnings: commissionStats.total_earnings,
+      pending_payouts: commissionStats.pending_earnings,
+      direct_referrals: referralStats.total_direct_referrals,
+      commission_stats: commissionStats,
+      referral_stats: referralStats,
+    };
+  } catch (error) {
+    console.error('Error getting partner dashboard metrics:', error);
+    return {
+      total_earnings: 0,
+      pending_payouts: 0,
+      direct_referrals: 0,
+      commission_stats: {
+        total_earnings: 0,
+        pending_earnings: 0,
+        paid_earnings: 0,
+        total_transactions: 0,
+        pending_transactions: 0,
+        paid_transactions: 0,
+      },
+      referral_stats: {
+        total_direct_referrals: 0,
+        active_referrals: 0,
+        converted_referrals: 0,
+        this_month_referrals: 0,
+      },
+    };
+  }
+}
+
+/**
+ * Get detailed commission report with filtering and pagination
+ */
+export async function getPartnerCommissionReport(partnerId: string, options: {
+  limit?: number;
+  offset?: number;
+  status?: string;
+  transaction_type?: string;
+  date_from?: string;
+  date_to?: string;
+  commission_level?: number;
+} = {}): Promise<{
+  commissions: Commission[];
+  total_count: number;
+  summary: {
+    total_amount: number;
+    pending_amount: number;
+    paid_amount: number;
+    total_transactions: number;
+  };
+}> {
+  try {
+    const tenantId = await getCurrentTenantId();
+    if (!tenantId) {
+      throw new Error('Unable to determine tenant context');
+    }
+
+    let whereClause = 'WHERE pc.tenant_id = $1 AND pc.beneficiary_partner_id = $2';
+    const params: any[] = [tenantId, partnerId];
+    let paramIndex = 3;
+
+    // Build dynamic filters
+    if (options.status) {
+      whereClause += ` AND pc.payout_status = $${paramIndex}`;
+      params.push(options.status);
+      paramIndex++;
+    }
+
+    if (options.transaction_type) {
+      whereClause += ` AND pc.transaction_type = $${paramIndex}`;
+      params.push(options.transaction_type);
+      paramIndex++;
+    }
+
+    if (options.date_from) {
+      whereClause += ` AND pc.transaction_date >= $${paramIndex}`;
+      params.push(options.date_from);
+      paramIndex++;
+    }
+
+    if (options.date_to) {
+      whereClause += ` AND pc.transaction_date <= $${paramIndex}`;
+      params.push(options.date_to);
+      paramIndex++;
+    }
+
+    if (options.commission_level) {
+      whereClause += ` AND pc.commission_level = $${paramIndex}`;
+      params.push(options.commission_level);
+      paramIndex++;
+    }
+
+    // Get total count and summary
+    const summaryResult = await execute_sql(`
+      SELECT 
+        COUNT(*) as total_count,
+        COALESCE(SUM(commission_amount), 0) as total_amount,
+        COALESCE(SUM(CASE WHEN payout_status = 'pending' THEN commission_amount ELSE 0 END), 0) as pending_amount,
+        COALESCE(SUM(CASE WHEN payout_status = 'paid' THEN commission_amount ELSE 0 END), 0) as paid_amount
+      FROM partner_commissions pc
+      ${whereClause};
+    `, params);
+
+    const summary = summaryResult.rows[0];
+
+    // Get paginated commission data
+    const limitClause = options.limit ? `LIMIT $${paramIndex}` : 'LIMIT 50';
+    if (options.limit) {
+      params.push(options.limit);
+      paramIndex++;
+    }
+
+    const offsetClause = options.offset ? `OFFSET $${paramIndex}` : '';
+    if (options.offset) {
+      params.push(options.offset);
+    }
+
+    const commissionsResult = await execute_sql(`
+      SELECT 
+        pc.*
+      FROM partner_commissions pc
+      ${whereClause}
+      ORDER BY pc.transaction_date DESC, pc.calculation_date DESC
+      ${limitClause} ${offsetClause};
+    `, params);
+
+    const commissions = commissionsResult.rows.map((row: any) => ({
+      id: row.id,
+      tenant_id: row.tenant_id,
+      transaction_id: row.transaction_id,
+      transaction_amount: parseFloat(row.transaction_amount),
+      transaction_type: row.transaction_type,
+      beneficiary_partner_id: row.beneficiary_partner_id,
+      beneficiary_partner_code: row.beneficiary_partner_code,
+      source_partner_id: row.source_partner_id,
+      source_partner_code: row.source_partner_code,
+      commission_level: parseInt(row.commission_level),
+      levels_from_source: parseInt(row.levels_from_source),
+      commission_percentage: parseFloat(row.commission_percentage),
+      commission_amount: parseFloat(row.commission_amount),
+      beneficiary_partner_level_id: row.beneficiary_partner_level_id,
+      beneficiary_partner_level_name: row.beneficiary_partner_level_name,
+      calculation_status: row.calculation_status,
+      payout_status: row.payout_status,
+      transaction_date: row.transaction_date,
+      calculation_date: row.calculation_date,
+      approved_date: row.approved_date,
+      paid_date: row.paid_date,
+      commission_engine_version: row.commission_engine_version,
+      notes: row.notes,
+      metadata: row.metadata || {},
+      created_at: row.created_at,
+      updated_at: row.updated_at
+    }));
+
+    return {
+      commissions,
+      total_count: parseInt(summary.total_count) || 0,
+      summary: {
+        total_amount: parseFloat(summary.total_amount) || 0,
+        pending_amount: parseFloat(summary.pending_amount) || 0,
+        paid_amount: parseFloat(summary.paid_amount) || 0,
+        total_transactions: parseInt(summary.total_count) || 0,
+      },
+    };
+  } catch (error) {
+    console.error('Error getting partner commission report:', error);
+    return {
+      commissions: [],
+      total_count: 0,
+      summary: {
+        total_amount: 0,
+        pending_amount: 0,
+        paid_amount: 0,
+        total_transactions: 0,
+      },
+    };
+  }
+}
