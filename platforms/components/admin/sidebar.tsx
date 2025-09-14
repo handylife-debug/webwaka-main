@@ -11,7 +11,9 @@ import {
   BarChart3, 
   Menu,
   ChevronLeft,
-  Shield
+  Shield,
+  Key,
+  CreditCard
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
@@ -35,6 +37,16 @@ const navigation = [
     name: 'Users',
     href: '/admin/users',
     icon: Users,
+  },
+  {
+    name: 'Plans',
+    href: '/admin/plans',
+    icon: CreditCard,
+  },
+  {
+    name: 'Credentials',
+    href: '/admin/credentials',
+    icon: Key,
   },
   {
     name: 'Analytics',

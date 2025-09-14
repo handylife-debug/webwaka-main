@@ -199,8 +199,10 @@ export function getCredentialsHealth(): {
   let totalCount = 0;
 
   // Check all credentials
-  Object.values(status).forEach(service => {
-    Object.values(service).forEach(credential => {
+  const services = [status.paystack, status.betaSMS, status.verifyMe];
+  services.forEach(service => {
+    const credentials = Object.values(service) as ServiceCredential[];
+    credentials.forEach(credential => {
       totalCount++;
       if (credential.isSet) {
         setCount++;
