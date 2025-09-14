@@ -9,6 +9,40 @@
  * - Automatic timestamp updates via triggers
  */
 
+// Core tenants table - foundation for multi-tenant architecture
+export const TENANTS_TABLE_SQL = `
+  CREATE TABLE IF NOT EXISTS tenants (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    subdomain VARCHAR(100) NOT NULL UNIQUE,
+    tenant_name VARCHAR(200) NOT NULL,
+    emoji VARCHAR(10) DEFAULT '🏢',
+    subscription_plan VARCHAR(50) DEFAULT 'Free' CHECK (subscription_plan IN ('Free', 'Pro', 'Enterprise')),
+    status VARCHAR(20) DEFAULT 'Active' CHECK (status IN ('Active', 'Inactive', 'Suspended', 'Archived')),
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    
+    -- Data integrity constraints
+    CONSTRAINT check_subdomain_format CHECK (subdomain ~ '^[a-z0-9][a-z0-9-]*[a-z0-9]$'),
+    CONSTRAINT check_subdomain_length CHECK (char_length(subdomain) >= 2 AND char_length(subdomain) <= 50)
+  );
+  
+  -- Indexes for performance
+  CREATE INDEX IF NOT EXISTS idx_tenants_subdomain ON tenants(subdomain);
+  CREATE INDEX IF NOT EXISTS idx_tenants_status ON tenants(status);
+  
+  -- Trigger for automatic updated_at
+  CREATE OR REPLACE FUNCTION update_updated_at_column()
+  RETURNS TRIGGER AS $$
+  BEGIN
+    NEW.updated_at = CURRENT_TIMESTAMP;
+    RETURN NEW;
+  END;
+  $$ language 'plpgsql';
+  
+  CREATE TRIGGER update_tenants_updated_at BEFORE UPDATE ON tenants
+    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+`;
+
 // SQL schema definitions for Partner Management tables
 
 export const PARTNER_LEVELS_TABLE_SQL = `

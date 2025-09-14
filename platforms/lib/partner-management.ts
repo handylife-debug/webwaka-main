@@ -1,6 +1,8 @@
 'use server';
 
 import { execute_sql } from '@/lib/database';
+import { headers } from 'next/headers';
+// Note: Import issue with schema file, defining inline for now
 
 export interface PartnerLevel {
   id: string;
@@ -119,6 +121,20 @@ export async function initializePartnerTables(): Promise<void> {
     // Ensure pgcrypto extension is available for UUID generation
     await execute_sql(`CREATE EXTENSION IF NOT EXISTS pgcrypto;`);
     
+    // Create tenants table FIRST (other tables depend on it)
+    await execute_sql(`
+      CREATE TABLE IF NOT EXISTS tenants (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        subdomain VARCHAR(100) NOT NULL UNIQUE,
+        tenant_name VARCHAR(200) NOT NULL,
+        emoji VARCHAR(10) DEFAULT '🏢',
+        subscription_plan VARCHAR(50) DEFAULT 'Free',
+        status VARCHAR(20) DEFAULT 'Active',
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+      );
+    `);
+    
     // Check if partner_levels table has max_referral_depth column
     const columnExists = await execute_sql(`
       SELECT column_name 
@@ -135,7 +151,7 @@ export async function initializePartnerTables(): Promise<void> {
       `);
     }
     
-    // Create partner_applications table if it doesn't exist
+    // Create partner_applications table (inline for now due to import issues)
     await execute_sql(`
       CREATE TABLE IF NOT EXISTS partner_applications (
         id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -163,6 +179,8 @@ export async function initializePartnerTables(): Promise<void> {
         created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
         
+        -- Multi-tenant constraints
+        CONSTRAINT fk_partner_applications_tenant FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
         CONSTRAINT unique_application_email_per_tenant UNIQUE (tenant_id, email),
         CONSTRAINT check_application_date_not_future CHECK (application_date <= CURRENT_DATE),
         CONSTRAINT check_reviewed_date_after_application CHECK (reviewed_date IS NULL OR reviewed_date >= application_date)
@@ -463,10 +481,97 @@ export async function getPartnerLevelStats(): Promise<{
 }
 
 /**
+ * Extract subdomain from current request headers
+ */
+async function getCurrentSubdomain(): Promise<string | null> {
+  try {
+    const headersList = await headers();
+    const host = headersList.get('host') || '';
+    const hostname = host.split(':')[0];
+
+    // Local development environment
+    if (hostname.includes('localhost') || hostname.includes('127.0.0.1')) {
+      if (hostname.includes('.localhost')) {
+        return hostname.split('.')[0];
+      }
+      return null;
+    }
+
+    // Production environment - extract subdomain
+    const rootDomain = process.env.NEXT_PUBLIC_ROOT_DOMAIN || 'example.com';
+    const rootDomainFormatted = rootDomain.split(':')[0];
+
+    // Handle preview deployment URLs (tenant---branch-name.vercel.app)
+    if (hostname.includes('---') && hostname.endsWith('.vercel.app')) {
+      const parts = hostname.split('---');
+      return parts.length > 0 ? parts[0] : null;
+    }
+
+    // Regular subdomain detection
+    const isSubdomain =
+      hostname !== rootDomainFormatted &&
+      hostname !== `www.${rootDomainFormatted}` &&
+      hostname.endsWith(`.${rootDomainFormatted}`);
+
+    return isSubdomain ? hostname.replace(`.${rootDomainFormatted}`, '') : null;
+  } catch (error) {
+    console.error('Error extracting subdomain:', error);
+    return null;
+  }
+}
+
+/**
+ * Get tenant by subdomain, create if doesn't exist
+ */
+async function getOrCreateTenant(subdomain: string): Promise<string | null> {
+  try {
+    // First, try to get existing tenant
+    const existingTenant = await execute_sql(
+      `SELECT id FROM tenants WHERE subdomain = $1`,
+      [subdomain]
+    );
+
+    if (existingTenant.rows.length > 0) {
+      return existingTenant.rows[0].id;
+    }
+
+    // Create new tenant if doesn't exist
+    const newTenant = await execute_sql(
+      `INSERT INTO tenants (subdomain, tenant_name) VALUES ($1, $2) RETURNING id`,
+      [subdomain, subdomain] // Use subdomain as tenant_name for now
+    );
+
+    return newTenant.rows[0]?.id || null;
+  } catch (error) {
+    console.error('Error getting or creating tenant:', error);
+    return null;
+  }
+}
+
+/**
+ * Get current tenant ID from request context
+ */
+async function getCurrentTenantId(): Promise<string | null> {
+  const subdomain = await getCurrentSubdomain();
+  if (!subdomain) {
+    // For main domain requests, use a default tenant
+    return await getOrCreateTenant('main');
+  }
+
+  return await getOrCreateTenant(subdomain);
+}
+
+/**
  * Create a new partner application
  */
 export async function createPartnerApplication(applicationData: CreatePartnerApplicationData): Promise<string | null> {
   try {
+    // Get the current tenant ID from request context
+    const tenantId = await getCurrentTenantId();
+    if (!tenantId) {
+      throw new Error('Unable to determine tenant context');
+    }
+    
     const result = await execute_sql(`
       INSERT INTO partner_applications (
         tenant_id, email, first_name, last_name, phone, company_name, 
@@ -476,7 +581,7 @@ export async function createPartnerApplication(applicationData: CreatePartnerApp
       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
       RETURNING id;
     `, [
-      '00000000-0000-0000-0000-000000000000', // Default tenant for now
+      tenantId, // Use actual tenant context
       applicationData.email,
       applicationData.first_name,
       applicationData.last_name,
