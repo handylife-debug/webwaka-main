@@ -747,13 +747,14 @@ export const PRODUCT_VARIANTS_TABLE_SQL = `
   );
 `;
 
-// Stock levels table for multi-location inventory tracking
+// Stock levels table for multi-location inventory tracking with generated variant_key
 export const STOCK_LEVELS_TABLE_SQL = `
   CREATE TABLE IF NOT EXISTS stock_levels (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     tenant_id UUID NOT NULL,
     product_id UUID NOT NULL,
     variant_id UUID,
+    variant_key UUID GENERATED ALWAYS AS (COALESCE(variant_id, '00000000-0000-0000-0000-000000000000'::UUID)) STORED,
     location_id UUID NOT NULL,
     current_stock INTEGER NOT NULL DEFAULT 0,
     reserved_stock INTEGER DEFAULT 0,
@@ -770,8 +771,8 @@ export const STOCK_LEVELS_TABLE_SQL = `
     CONSTRAINT fk_stock_levels_variant FOREIGN KEY (variant_id) REFERENCES product_variants(id) ON DELETE CASCADE,
     CONSTRAINT fk_stock_levels_location FOREIGN KEY (location_id) REFERENCES locations(id) ON DELETE CASCADE,
     
-    -- Unique constraints - one stock level per product/variant/location combination
-    CONSTRAINT unique_stock_per_product_location UNIQUE (tenant_id, product_id, COALESCE(variant_id, '00000000-0000-0000-0000-000000000000'::UUID), location_id),
+    -- Unique constraints using generated variant_key for proper conflict handling
+    CONSTRAINT unique_stock_per_product_location UNIQUE (tenant_id, product_id, variant_key, location_id),
     
     -- Data integrity constraints
     CONSTRAINT check_stock_levels_non_negative CHECK (
@@ -1217,53 +1218,93 @@ export const LOW_STOCK_ALERTS_TRIGGERS_SQL = `
 
 // Business logic triggers for inventory management
 
+// Concurrency-safe stock movement trigger with improved UPSERT safety
 export const STOCK_MOVEMENT_TRIGGER_SQL = `
   CREATE OR REPLACE FUNCTION update_stock_levels_on_movement()
   RETURNS TRIGGER AS $$
   DECLARE
     stock_record RECORD;
+    current_stock_val INTEGER;
+    alert_record RECORD;
   BEGIN
-    -- Update stock level based on movement
-    SELECT * INTO stock_record
+    -- Use row-level locking to prevent concurrent updates
+    SELECT id, current_stock INTO stock_record
     FROM stock_levels
     WHERE tenant_id = NEW.tenant_id
       AND product_id = NEW.product_id
       AND (variant_id = NEW.variant_id OR (variant_id IS NULL AND NEW.variant_id IS NULL))
-      AND location_id = NEW.location_id;
+      AND location_id = NEW.location_id
+    FOR UPDATE;
     
     IF FOUND THEN
-      -- Update existing stock level
+      -- Calculate new stock level and prevent negative stock
+      current_stock_val := stock_record.current_stock + NEW.quantity_change;
+      
+      -- Prevent negative stock unless it's an adjustment or audit movement
+      IF current_stock_val < 0 AND NEW.movement_type NOT IN ('adjustment', 'audit', 'loss') THEN
+        RAISE EXCEPTION 'STOCK_INSUFFICIENT: Cannot reduce stock below zero. Current: %, Requested change: %, Product ID: %', 
+          stock_record.current_stock, NEW.quantity_change, NEW.product_id;
+      END IF;
+      
+      -- Update existing stock level with atomic operation
       UPDATE stock_levels
-      SET current_stock = current_stock + NEW.quantity_change,
+      SET current_stock = GREATEST(0, current_stock_val),
           last_movement_at = NEW.created_at,
           updated_at = CURRENT_TIMESTAMP
       WHERE id = stock_record.id;
+      
+      current_stock_val := GREATEST(0, current_stock_val);
     ELSE
-      -- Create new stock level record if it doesn't exist
+      -- Create new stock level record with improved UPSERT safety
+      current_stock_val := GREATEST(0, NEW.quantity_change);
+      
       INSERT INTO stock_levels (
         tenant_id, product_id, variant_id, location_id,
         current_stock, cost_per_unit, last_movement_at
       ) VALUES (
         NEW.tenant_id, NEW.product_id, NEW.variant_id, NEW.location_id,
-        GREATEST(0, NEW.quantity_change), NEW.cost_per_unit, NEW.created_at
-      );
+        current_stock_val, COALESCE(NEW.cost_per_unit, 0.00), NEW.created_at
+      )
+      ON CONFLICT ON CONSTRAINT unique_stock_per_product_location
+      DO UPDATE SET
+        current_stock = GREATEST(0, stock_levels.current_stock + NEW.quantity_change),
+        last_movement_at = NEW.created_at,
+        updated_at = CURRENT_TIMESTAMP
+      WHERE NEW.movement_type IN ('adjustment','audit','loss')
+         OR stock_levels.current_stock + NEW.quantity_change >= 0
+      RETURNING current_stock INTO current_stock_val;
+      
+      -- Check if the UPSERT succeeded and handle negative stock violations
+      IF NOT FOUND THEN
+        RAISE EXCEPTION 'STOCK_INSUFFICIENT: Cannot reduce stock below zero. Current: %, Change: %, Product: %', 
+          (SELECT current_stock FROM stock_levels 
+           WHERE tenant_id = NEW.tenant_id AND product_id = NEW.product_id 
+           AND (variant_id = NEW.variant_id OR (variant_id IS NULL AND NEW.variant_id IS NULL)) 
+           AND location_id = NEW.location_id), 
+          NEW.quantity_change, NEW.product_id;
+      END IF;
     END IF;
     
-    -- Update low stock alert current stock
-    UPDATE low_stock_alerts
-    SET current_stock = (
-      SELECT current_stock
-      FROM stock_levels
-      WHERE tenant_id = NEW.tenant_id
-        AND product_id = NEW.product_id
-        AND (variant_id = NEW.variant_id OR (variant_id IS NULL AND NEW.variant_id IS NULL))
-        AND location_id = NEW.location_id
-    ),
-    updated_at = CURRENT_TIMESTAMP
+    -- Update low stock alerts with row-level locking
+    SELECT id, alert_threshold, is_active INTO alert_record
+    FROM low_stock_alerts
     WHERE tenant_id = NEW.tenant_id
       AND product_id = NEW.product_id
       AND (variant_id = NEW.variant_id OR (variant_id IS NULL AND NEW.variant_id IS NULL))
-      AND location_id = NEW.location_id;
+      AND location_id = NEW.location_id
+    FOR UPDATE;
+    
+    IF FOUND THEN
+      UPDATE low_stock_alerts
+      SET current_stock = current_stock_val,
+          last_alerted_at = CASE 
+            WHEN current_stock_val <= alert_threshold AND is_active = true 
+            THEN CURRENT_TIMESTAMP 
+            ELSE last_alerted_at 
+          END,
+          updated_at = CURRENT_TIMESTAMP
+      WHERE id = alert_record.id;
+    END IF;
     
     RETURN NEW;
   END;
@@ -1274,6 +1315,224 @@ export const STOCK_MOVEMENT_TRIGGER_SQL = `
     AFTER INSERT ON stock_movements
     FOR EACH ROW
     EXECUTE FUNCTION update_stock_levels_on_movement();
+`;
+
+// Negative stock prevention trigger
+export const PREVENT_NEGATIVE_STOCK_TRIGGER_SQL = `
+  CREATE OR REPLACE FUNCTION prevent_negative_stock()
+  RETURNS TRIGGER AS $$
+  BEGIN
+    -- Prevent negative stock unless it's an administrative adjustment
+    IF NEW.current_stock < 0 AND TG_OP = 'UPDATE' THEN
+      -- Allow negative stock only for specific movement types via context
+      IF current_setting('inventory.allow_negative_stock', true) != 'true' THEN
+        RAISE EXCEPTION 'NEGATIVE_STOCK_PREVENTED: Stock cannot go below zero. Current attempt: %, Product ID: %', 
+          NEW.current_stock, NEW.product_id;
+      END IF;
+    END IF;
+    
+    RETURN NEW;
+  END;
+  $$ language 'plpgsql';
+
+  DROP TRIGGER IF EXISTS trigger_prevent_negative_stock ON stock_levels;
+  CREATE TRIGGER trigger_prevent_negative_stock
+    BEFORE UPDATE ON stock_levels
+    FOR EACH ROW
+    EXECUTE FUNCTION prevent_negative_stock();
+`;
+
+// Purchase order status transition validation trigger
+export const PO_STATUS_VALIDATION_TRIGGER_SQL = `
+  CREATE OR REPLACE FUNCTION validate_po_status_transitions()
+  RETURNS TRIGGER AS $$
+  BEGIN
+    -- Validate status transitions are logical
+    IF TG_OP = 'UPDATE' AND OLD.status != NEW.status THEN
+      -- Define valid status transitions
+      CASE OLD.status
+        WHEN 'draft' THEN
+          IF NEW.status NOT IN ('pending', 'cancelled') THEN
+            RAISE EXCEPTION 'INVALID_PO_TRANSITION: Cannot change status from % to %', OLD.status, NEW.status;
+          END IF;
+        WHEN 'pending' THEN
+          IF NEW.status NOT IN ('approved', 'cancelled') THEN
+            RAISE EXCEPTION 'INVALID_PO_TRANSITION: Cannot change status from % to %', OLD.status, NEW.status;
+          END IF;
+        WHEN 'approved' THEN
+          IF NEW.status NOT IN ('shipped', 'cancelled') THEN
+            RAISE EXCEPTION 'INVALID_PO_TRANSITION: Cannot change status from % to %', OLD.status, NEW.status;
+          END IF;
+        WHEN 'shipped' THEN
+          IF NEW.status NOT IN ('received', 'partially_received') THEN
+            RAISE EXCEPTION 'INVALID_PO_TRANSITION: Cannot change status from % to %', OLD.status, NEW.status;
+          END IF;
+        WHEN 'partially_received' THEN
+          IF NEW.status NOT IN ('received', 'shipped') THEN
+            RAISE EXCEPTION 'INVALID_PO_TRANSITION: Cannot change status from % to %', OLD.status, NEW.status;
+          END IF;
+        WHEN 'received' THEN
+          IF NEW.status NOT IN ('completed') THEN
+            RAISE EXCEPTION 'INVALID_PO_TRANSITION: Cannot change status from % to %', OLD.status, NEW.status;
+          END IF;
+        WHEN 'cancelled' THEN
+          RAISE EXCEPTION 'INVALID_PO_TRANSITION: Cannot change status from cancelled to %', NEW.status;
+        WHEN 'completed' THEN
+          RAISE EXCEPTION 'INVALID_PO_TRANSITION: Cannot change status from completed to %', NEW.status;
+        ELSE
+          RAISE EXCEPTION 'INVALID_PO_STATUS: Unknown status %', OLD.status;
+      END CASE;
+      
+      -- Set completion date when status becomes completed
+      IF NEW.status = 'completed' AND OLD.status != 'completed' THEN
+        NEW.completed_date = CURRENT_TIMESTAMP;
+      END IF;
+      
+      -- Set received date when status becomes received
+      IF NEW.status = 'received' AND OLD.status != 'received' THEN
+        NEW.received_date = CURRENT_TIMESTAMP;
+      END IF;
+    END IF;
+    
+    RETURN NEW;
+  END;
+  $$ language 'plpgsql';
+
+  DROP TRIGGER IF EXISTS trigger_validate_po_status ON purchase_orders;
+  CREATE TRIGGER trigger_validate_po_status
+    BEFORE UPDATE ON purchase_orders
+    FOR EACH ROW
+    EXECUTE FUNCTION validate_po_status_transitions();
+`;
+
+// Automatic low stock alert trigger
+export const LOW_STOCK_ALERT_TRIGGER_SQL = `
+  CREATE OR REPLACE FUNCTION manage_low_stock_alerts()
+  RETURNS TRIGGER AS $$
+  DECLARE
+    alert_exists BOOLEAN := false;
+    should_alert BOOLEAN := false;
+  BEGIN
+    -- Only process when stock level changes
+    IF TG_OP = 'UPDATE' AND OLD.current_stock = NEW.current_stock THEN
+      RETURN NEW;
+    END IF;
+    
+    -- Check if alert exists for this product/location combination
+    SELECT EXISTS(
+      SELECT 1 FROM low_stock_alerts 
+      WHERE tenant_id = NEW.tenant_id
+        AND product_id = NEW.product_id
+        AND (variant_id = NEW.variant_id OR (variant_id IS NULL AND NEW.variant_id IS NULL))
+        AND location_id = NEW.location_id
+    ) INTO alert_exists;
+    
+    -- Get product details to determine alert threshold
+    WITH product_info AS (
+      SELECT 
+        ip.product_name,
+        ip.minimum_stock_level,
+        COALESCE(pv.variant_name, '') as variant_name
+      FROM inventory_products ip
+      LEFT JOIN product_variants pv ON pv.id = NEW.variant_id
+      WHERE ip.id = NEW.product_id
+    )
+    SELECT NEW.current_stock <= COALESCE(pi.minimum_stock_level, 10) INTO should_alert
+    FROM product_info pi;
+    
+    IF should_alert AND NOT alert_exists THEN
+      -- Create new low stock alert
+      INSERT INTO low_stock_alerts (
+        tenant_id, product_id, variant_id, location_id,
+        alert_threshold, current_stock, is_active,
+        last_alerted_at, alert_frequency_hours
+      )
+      SELECT 
+        NEW.tenant_id, NEW.product_id, NEW.variant_id, NEW.location_id,
+        COALESCE(ip.minimum_stock_level, 10), NEW.current_stock, true,
+        CURRENT_TIMESTAMP, 24
+      FROM inventory_products ip
+      WHERE ip.id = NEW.product_id
+      ON CONFLICT (tenant_id, product_id, COALESCE(variant_id, '00000000-0000-0000-0000-000000000000'::UUID), location_id)
+      DO UPDATE SET
+        current_stock = NEW.current_stock,
+        is_active = true,
+        last_alerted_at = CURRENT_TIMESTAMP,
+        updated_at = CURRENT_TIMESTAMP;
+        
+    ELSIF alert_exists THEN
+      -- Update existing alert
+      UPDATE low_stock_alerts
+      SET current_stock = NEW.current_stock,
+          is_active = should_alert,
+          last_alerted_at = CASE 
+            WHEN should_alert AND is_active = false THEN CURRENT_TIMESTAMP
+            WHEN should_alert THEN last_alerted_at
+            ELSE last_alerted_at
+          END,
+          updated_at = CURRENT_TIMESTAMP
+      WHERE tenant_id = NEW.tenant_id
+        AND product_id = NEW.product_id
+        AND (variant_id = NEW.variant_id OR (variant_id IS NULL AND NEW.variant_id IS NULL))
+        AND location_id = NEW.location_id;
+    END IF;
+    
+    RETURN NEW;
+  END;
+  $$ language 'plpgsql';
+
+  DROP TRIGGER IF EXISTS trigger_manage_low_stock_alerts ON stock_levels;
+  CREATE TRIGGER trigger_manage_low_stock_alerts
+    AFTER INSERT OR UPDATE ON stock_levels
+    FOR EACH ROW
+    EXECUTE FUNCTION manage_low_stock_alerts();
+`;
+
+// Purchase order receipt stock adjustment trigger
+export const PO_RECEIPT_STOCK_TRIGGER_SQL = `
+  CREATE OR REPLACE FUNCTION update_stock_on_po_receipt()
+  RETURNS TRIGGER AS $$
+  DECLARE
+    po_record RECORD;
+    item_record RECORD;
+  BEGIN
+    -- Only process when PO status changes to received or partially_received
+    IF TG_OP = 'UPDATE' AND OLD.status != NEW.status AND NEW.status IN ('received', 'partially_received') THEN
+      
+      SELECT tenant_id, location_id INTO po_record
+      FROM purchase_orders
+      WHERE id = NEW.id;
+      
+      -- Process all items in the purchase order
+      FOR item_record IN 
+        SELECT product_id, variant_id, quantity_ordered, quantity_received, cost_per_unit
+        FROM purchase_order_items
+        WHERE purchase_order_id = NEW.id AND quantity_received > 0
+      LOOP
+        -- Create stock movement for received items
+        INSERT INTO stock_movements (
+          tenant_id, product_id, variant_id, location_id,
+          movement_type, movement_reason, quantity_change,
+          cost_per_unit, reference_type, reference_id,
+          notes, created_at
+        ) VALUES (
+          po_record.tenant_id, item_record.product_id, item_record.variant_id, po_record.location_id,
+          'receipt', 'purchase_order_receipt', item_record.quantity_received,
+          item_record.cost_per_unit, 'purchase_order', NEW.id,
+          'Automatic stock receipt from PO #' || NEW.po_number, CURRENT_TIMESTAMP
+        );
+      END LOOP;
+    END IF;
+    
+    RETURN NEW;
+  END;
+  $$ language 'plpgsql';
+
+  DROP TRIGGER IF EXISTS trigger_update_stock_on_po_receipt ON purchase_orders;
+  CREATE TRIGGER trigger_update_stock_on_po_receipt
+    AFTER UPDATE ON purchase_orders
+    FOR EACH ROW
+    EXECUTE FUNCTION update_stock_on_po_receipt();
 `;
 
 // Consolidated SQL exports for inventory management
@@ -1322,5 +1581,331 @@ export const ALL_INVENTORY_TRIGGERS_SQL = [
   STOCK_AUDITS_TRIGGERS_SQL,
   PRODUCT_SERIAL_NUMBERS_TRIGGERS_SQL,
   LOW_STOCK_ALERTS_TRIGGERS_SQL,
-  STOCK_MOVEMENT_TRIGGER_SQL
+  // Business Logic Triggers for Production-Ready Inventory Management
+  STOCK_MOVEMENT_TRIGGER_SQL,
+  PREVENT_NEGATIVE_STOCK_TRIGGER_SQL,
+  PO_STATUS_VALIDATION_TRIGGER_SQL,
+  LOW_STOCK_ALERT_TRIGGER_SQL,
+  PO_RECEIPT_STOCK_TRIGGER_SQL
 ].join('\n\n');
+
+// Comprehensive verification function for inventory business logic
+export const VERIFY_INVENTORY_BUSINESS_LOGIC_FUNCTION_SQL = `
+  CREATE OR REPLACE FUNCTION verify_inventory_business_logic(
+    test_tenant_id UUID DEFAULT gen_random_uuid()
+  )
+  RETURNS TABLE(
+    test_name TEXT,
+    status TEXT,
+    details TEXT,
+    execution_time_ms INTEGER
+  ) AS $$
+  DECLARE
+    start_time TIMESTAMP;
+    end_time TIMESTAMP;
+    test_product_id UUID;
+    test_variant_id UUID;
+    test_location_id UUID;
+    test_supplier_id UUID;
+    test_category_id UUID;
+    test_po_id UUID;
+    initial_stock INTEGER;
+    updated_stock INTEGER;
+    alert_count INTEGER;
+    error_caught BOOLEAN;
+  BEGIN
+    
+    -- Test 1: Setup test data
+    start_time := clock_timestamp();
+    
+    -- Create test tenant
+    INSERT INTO tenants (id, subdomain, tenant_name) 
+    VALUES (test_tenant_id, 'test-inventory-' || extract(epoch from now())::text, 'Test Tenant')
+    ON CONFLICT (id) DO NOTHING;
+    
+    -- Create test category
+    INSERT INTO product_categories (id, tenant_id, category_name, is_active)
+    VALUES (gen_random_uuid(), test_tenant_id, 'Test Category', true)
+    RETURNING id INTO test_category_id;
+    
+    -- Create test supplier
+    INSERT INTO suppliers (id, tenant_id, supplier_name, email, is_active)
+    VALUES (gen_random_uuid(), test_tenant_id, 'Test Supplier', 'test@example.com', true)
+    RETURNING id INTO test_supplier_id;
+    
+    -- Create test location
+    INSERT INTO locations (id, tenant_id, location_name, location_type, is_active, is_default)
+    VALUES (gen_random_uuid(), test_tenant_id, 'Test Warehouse', 'warehouse', true, true)
+    RETURNING id INTO test_location_id;
+    
+    -- Create test product
+    INSERT INTO inventory_products (id, tenant_id, product_name, sku, category_id, supplier_id, minimum_stock_level, is_active)
+    VALUES (gen_random_uuid(), test_tenant_id, 'Test Product', 'TEST-001', test_category_id, test_supplier_id, 5, true)
+    RETURNING id INTO test_product_id;
+    
+    -- Create test variant
+    INSERT INTO product_variants (id, tenant_id, product_id, variant_name, variant_type, sku, is_active)
+    VALUES (gen_random_uuid(), test_tenant_id, test_product_id, 'Test Variant', 'size', 'TEST-001-L', true)
+    RETURNING id INTO test_variant_id;
+    
+    end_time := clock_timestamp();
+    RETURN QUERY SELECT 
+      'Setup test data'::TEXT,
+      'PASSED'::TEXT,
+      'Created test tenant, category, supplier, location, product, and variant'::TEXT,
+      extract(milliseconds from (end_time - start_time))::INTEGER;
+    
+    -- Test 2: Stock movement creates stock level record
+    start_time := clock_timestamp();
+    BEGIN
+      INSERT INTO stock_movements (
+        tenant_id, product_id, variant_id, location_id,
+        movement_type, movement_reason, quantity_change, cost_per_unit
+      ) VALUES (
+        test_tenant_id, test_product_id, test_variant_id, test_location_id,
+        'receipt', 'initial_stock', 100, 10.50
+      );
+      
+      SELECT current_stock INTO initial_stock
+      FROM stock_levels
+      WHERE tenant_id = test_tenant_id 
+        AND product_id = test_product_id
+        AND variant_id = test_variant_id 
+        AND location_id = test_location_id;
+      
+      IF initial_stock = 100 THEN
+        end_time := clock_timestamp();
+        RETURN QUERY SELECT 
+          'Stock movement trigger'::TEXT,
+          'PASSED'::TEXT,
+          format('Stock level correctly created with quantity %s', initial_stock)::TEXT,
+          extract(milliseconds from (end_time - start_time))::INTEGER;
+      ELSE
+        end_time := clock_timestamp();
+        RETURN QUERY SELECT 
+          'Stock movement trigger'::TEXT,
+          'FAILED'::TEXT,
+          format('Expected stock 100, got %s', COALESCE(initial_stock::TEXT, 'NULL'))::TEXT,
+          extract(milliseconds from (end_time - start_time))::INTEGER;
+      END IF;
+    EXCEPTION
+      WHEN OTHERS THEN
+        end_time := clock_timestamp();
+        RETURN QUERY SELECT 
+          'Stock movement trigger'::TEXT,
+          'FAILED'::TEXT,
+          format('Exception: %s', SQLERRM)::TEXT,
+          extract(milliseconds from (end_time - start_time))::INTEGER;
+    END;
+    
+    -- Test 3: Low stock alert creation
+    start_time := clock_timestamp();
+    BEGIN
+      -- Reduce stock below minimum threshold (5)
+      INSERT INTO stock_movements (
+        tenant_id, product_id, variant_id, location_id,
+        movement_type, movement_reason, quantity_change, cost_per_unit
+      ) VALUES (
+        test_tenant_id, test_product_id, test_variant_id, test_location_id,
+        'shipment', 'sale', -97, 10.50
+      );
+      
+      SELECT COUNT(*) INTO alert_count
+      FROM low_stock_alerts
+      WHERE tenant_id = test_tenant_id 
+        AND product_id = test_product_id
+        AND variant_id = test_variant_id 
+        AND location_id = test_location_id
+        AND is_active = true;
+      
+      IF alert_count > 0 THEN
+        end_time := clock_timestamp();
+        RETURN QUERY SELECT 
+          'Low stock alert trigger'::TEXT,
+          'PASSED'::TEXT,
+          format('Low stock alert created when stock dropped below threshold')::TEXT,
+          extract(milliseconds from (end_time - start_time))::INTEGER;
+      ELSE
+        end_time := clock_timestamp();
+        RETURN QUERY SELECT 
+          'Low stock alert trigger'::TEXT,
+          'FAILED'::TEXT,
+          format('Low stock alert not created')::TEXT,
+          extract(milliseconds from (end_time - start_time))::INTEGER;
+      END IF;
+    EXCEPTION
+      WHEN OTHERS THEN
+        end_time := clock_timestamp();
+        RETURN QUERY SELECT 
+          'Low stock alert trigger'::TEXT,
+          'FAILED'::TEXT,
+          format('Exception: %s', SQLERRM)::TEXT,
+          extract(milliseconds from (end_time - start_time))::INTEGER;
+    END;
+    
+    -- Test 4: Negative stock prevention
+    start_time := clock_timestamp();
+    BEGIN
+      error_caught := false;
+      
+      -- Try to reduce stock below zero
+      INSERT INTO stock_movements (
+        tenant_id, product_id, variant_id, location_id,
+        movement_type, movement_reason, quantity_change, cost_per_unit
+      ) VALUES (
+        test_tenant_id, test_product_id, test_variant_id, test_location_id,
+        'shipment', 'sale', -10, 10.50
+      );
+      
+      end_time := clock_timestamp();
+      RETURN QUERY SELECT 
+        'Negative stock prevention'::TEXT,
+        'FAILED'::TEXT,
+        'Negative stock was allowed when it should have been prevented'::TEXT,
+        extract(milliseconds from (end_time - start_time))::INTEGER;
+        
+    EXCEPTION
+      WHEN OTHERS THEN
+        IF SQLERRM LIKE '%STOCK_INSUFFICIENT%' THEN
+          error_caught := true;
+          end_time := clock_timestamp();
+          RETURN QUERY SELECT 
+            'Negative stock prevention'::TEXT,
+            'PASSED'::TEXT,
+            'Correctly prevented negative stock with proper error message'::TEXT,
+            extract(milliseconds from (end_time - start_time))::INTEGER;
+        ELSE
+          end_time := clock_timestamp();
+          RETURN QUERY SELECT 
+            'Negative stock prevention'::TEXT,
+            'FAILED'::TEXT,
+            format('Unexpected exception: %s', SQLERRM)::TEXT,
+            extract(milliseconds from (end_time - start_time))::INTEGER;
+        END IF;
+    END;
+    
+    -- Test 5: Purchase order status transitions
+    start_time := clock_timestamp();
+    BEGIN
+      -- Create purchase order
+      INSERT INTO purchase_orders (id, tenant_id, supplier_id, location_id, po_number, status)
+      VALUES (gen_random_uuid(), test_tenant_id, test_supplier_id, test_location_id, 'PO-TEST-001', 'draft')
+      RETURNING id INTO test_po_id;
+      
+      -- Valid transition: draft -> pending
+      UPDATE purchase_orders SET status = 'pending' WHERE id = test_po_id;
+      
+      -- Valid transition: pending -> approved
+      UPDATE purchase_orders SET status = 'approved' WHERE id = test_po_id;
+      
+      -- Try invalid transition: approved -> completed (should fail)
+      error_caught := false;
+      BEGIN
+        UPDATE purchase_orders SET status = 'completed' WHERE id = test_po_id;
+      EXCEPTION
+        WHEN OTHERS THEN
+          IF SQLERRM LIKE '%INVALID_PO_TRANSITION%' THEN
+            error_caught := true;
+          END IF;
+      END;
+      
+      IF error_caught THEN
+        end_time := clock_timestamp();
+        RETURN QUERY SELECT 
+          'PO status validation'::TEXT,
+          'PASSED'::TEXT,
+          'Correctly prevented invalid status transition'::TEXT,
+          extract(milliseconds from (end_time - start_time))::INTEGER;
+      ELSE
+        end_time := clock_timestamp();
+        RETURN QUERY SELECT 
+          'PO status validation'::TEXT,
+          'FAILED'::TEXT,
+          'Invalid status transition was allowed'::TEXT,
+          extract(milliseconds from (end_time - start_time))::INTEGER;
+      END IF;
+    EXCEPTION
+      WHEN OTHERS THEN
+        end_time := clock_timestamp();
+        RETURN QUERY SELECT 
+          'PO status validation'::TEXT,
+          'FAILED'::TEXT,
+          format('Exception: %s', SQLERRM)::TEXT,
+          extract(milliseconds from (end_time - start_time))::INTEGER;
+    END;
+    
+    -- Test 6: Concurrency safety test
+    start_time := clock_timestamp();
+    BEGIN
+      -- This would be better tested with actual concurrent connections
+      -- For now, we test the UPSERT functionality
+      
+      -- Try to create duplicate stock level (should use ON CONFLICT)
+      INSERT INTO stock_levels (
+        tenant_id, product_id, variant_id, location_id,
+        current_stock, cost_per_unit
+      ) VALUES (
+        test_tenant_id, test_product_id, test_variant_id, test_location_id,
+        50, 12.00
+      )
+      ON CONFLICT (tenant_id, product_id, COALESCE(variant_id, '00000000-0000-0000-0000-000000000000'::UUID), location_id)
+      DO UPDATE SET current_stock = stock_levels.current_stock + EXCLUDED.current_stock;
+      
+      SELECT current_stock INTO updated_stock
+      FROM stock_levels
+      WHERE tenant_id = test_tenant_id 
+        AND product_id = test_product_id
+        AND variant_id = test_variant_id 
+        AND location_id = test_location_id;
+      
+      -- Should be 3 (from previous test) + 50 = 53
+      IF updated_stock = 53 THEN
+        end_time := clock_timestamp();
+        RETURN QUERY SELECT 
+          'Concurrency safety (UPSERT)'::TEXT,
+          'PASSED'::TEXT,
+          format('UPSERT worked correctly, stock level: %s', updated_stock)::TEXT,
+          extract(milliseconds from (end_time - start_time))::INTEGER;
+      ELSE
+        end_time := clock_timestamp();
+        RETURN QUERY SELECT 
+          'Concurrency safety (UPSERT)'::TEXT,
+          'FAILED'::TEXT,
+          format('Expected stock 53, got %s', updated_stock)::TEXT,
+          extract(milliseconds from (end_time - start_time))::INTEGER;
+      END IF;
+    EXCEPTION
+      WHEN OTHERS THEN
+        end_time := clock_timestamp();
+        RETURN QUERY SELECT 
+          'Concurrency safety (UPSERT)'::TEXT,
+          'FAILED'::TEXT,
+          format('Exception: %s', SQLERRM)::TEXT,
+          extract(milliseconds from (end_time - start_time))::INTEGER;
+    END;
+    
+    -- Cleanup test data
+    start_time := clock_timestamp();
+    DELETE FROM low_stock_alerts WHERE tenant_id = test_tenant_id;
+    DELETE FROM stock_movements WHERE tenant_id = test_tenant_id;
+    DELETE FROM stock_levels WHERE tenant_id = test_tenant_id;
+    DELETE FROM purchase_order_items WHERE tenant_id = test_tenant_id;
+    DELETE FROM purchase_orders WHERE tenant_id = test_tenant_id;
+    DELETE FROM product_serial_numbers WHERE tenant_id = test_tenant_id;
+    DELETE FROM product_variants WHERE tenant_id = test_tenant_id;
+    DELETE FROM inventory_products WHERE tenant_id = test_tenant_id;
+    DELETE FROM locations WHERE tenant_id = test_tenant_id;
+    DELETE FROM suppliers WHERE tenant_id = test_tenant_id;
+    DELETE FROM product_categories WHERE tenant_id = test_tenant_id;
+    DELETE FROM tenants WHERE id = test_tenant_id;
+    
+    end_time := clock_timestamp();
+    RETURN QUERY SELECT 
+      'Cleanup test data'::TEXT,
+      'PASSED'::TEXT,
+      'Test data cleaned up successfully'::TEXT,
+      extract(milliseconds from (end_time - start_time))::INTEGER;
+      
+  END;
+  $$ language 'plpgsql';
+`;

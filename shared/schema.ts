@@ -1266,9 +1266,35 @@ export const STOCK_MOVEMENT_TRIGGER_SQL = `
       )
       ON CONFLICT (tenant_id, product_id, COALESCE(variant_id, '00000000-0000-0000-0000-000000000000'::UUID), location_id)
       DO UPDATE SET
-        current_stock = stock_levels.current_stock + NEW.quantity_change,
+        current_stock = GREATEST(0, stock_levels.current_stock + NEW.quantity_change),
         last_movement_at = NEW.created_at,
-        updated_at = CURRENT_TIMESTAMP;
+        updated_at = CURRENT_TIMESTAMP
+      WHERE (stock_levels.current_stock + NEW.quantity_change) >= 0 OR NEW.movement_type IN ('adjustment', 'audit', 'loss');
+      
+      -- Check if the upsert succeeded or failed due to negative stock constraint
+      IF NOT FOUND THEN
+        -- Get current stock for error message
+        SELECT current_stock INTO current_stock_val
+        FROM stock_levels
+        WHERE tenant_id = NEW.tenant_id
+          AND product_id = NEW.product_id
+          AND (variant_id = NEW.variant_id OR (variant_id IS NULL AND NEW.variant_id IS NULL))
+          AND location_id = NEW.location_id;
+        
+        -- Throw appropriate error if upsert was blocked by negative stock prevention
+        IF current_stock_val + NEW.quantity_change < 0 AND NEW.movement_type NOT IN ('adjustment', 'audit', 'loss') THEN
+          RAISE EXCEPTION 'STOCK_INSUFFICIENT: Cannot reduce stock below zero in concurrent operation. Current: %, Requested change: %, Product ID: %', 
+            current_stock_val, NEW.quantity_change, NEW.product_id;
+        END IF;
+      END IF;
+      
+      -- Set current_stock_val for alert processing
+      SELECT current_stock INTO current_stock_val
+      FROM stock_levels
+      WHERE tenant_id = NEW.tenant_id
+        AND product_id = NEW.product_id
+        AND (variant_id = NEW.variant_id OR (variant_id IS NULL AND NEW.variant_id IS NULL))
+        AND location_id = NEW.location_id;
     END IF;
     
     -- Update low stock alerts with row-level locking
@@ -1303,17 +1329,30 @@ export const STOCK_MOVEMENT_TRIGGER_SQL = `
     EXECUTE FUNCTION update_stock_levels_on_movement();
 `;
 
-// Negative stock prevention trigger
+// Negative stock prevention trigger with consistent movement type policy
 export const PREVENT_NEGATIVE_STOCK_TRIGGER_SQL = `
   CREATE OR REPLACE FUNCTION prevent_negative_stock()
   RETURNS TRIGGER AS $$
+  DECLARE
+    latest_movement_type VARCHAR(20);
   BEGIN
-    -- Prevent negative stock unless it's an administrative adjustment
+    -- Only prevent negative stock during UPDATE operations
     IF NEW.current_stock < 0 AND TG_OP = 'UPDATE' THEN
-      -- Allow negative stock only for specific movement types via context
-      IF current_setting('inventory.allow_negative_stock', true) != 'true' THEN
-        RAISE EXCEPTION 'NEGATIVE_STOCK_PREVENTED: Stock cannot go below zero. Current attempt: %, Product ID: %', 
-          NEW.current_stock, NEW.product_id;
+      -- Get the movement type from the most recent stock movement for this product/location
+      SELECT movement_type INTO latest_movement_type
+      FROM stock_movements
+      WHERE tenant_id = NEW.tenant_id
+        AND product_id = NEW.product_id
+        AND (variant_id = NEW.variant_id OR (variant_id IS NULL AND NEW.variant_id IS NULL))
+        AND location_id = NEW.location_id
+      ORDER BY created_at DESC
+      LIMIT 1;
+      
+      -- Allow negative stock only for specific administrative movement types
+      -- This ensures consistency with the stock movement trigger policy
+      IF latest_movement_type IS NULL OR latest_movement_type NOT IN ('adjustment', 'audit', 'loss') THEN
+        RAISE EXCEPTION 'NEGATIVE_STOCK_PREVENTED: Stock cannot go below zero. Current attempt: %, Product ID: %, Movement type: %', 
+          NEW.current_stock, NEW.product_id, COALESCE(latest_movement_type, 'unknown');
       END IF;
     END IF;
     
