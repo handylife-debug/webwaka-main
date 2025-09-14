@@ -59,6 +59,58 @@ export interface UpdatePartnerLevelData {
 
 export type PartnerLevelStatus = 'active' | 'inactive' | 'archived';
 
+export interface PartnerApplication {
+  id: string;
+  tenant_id: string;
+  email: string;
+  first_name: string;
+  last_name: string;
+  phone?: string;
+  company_name?: string;
+  company_website?: string;
+  experience_level?: string;
+  marketing_experience?: string;
+  why_partner?: string;
+  referral_methods?: string;
+  sponsor_email?: string;
+  sponsor_id?: string;
+  requested_partner_level_id?: string;
+  application_status: string;
+  application_date: string;
+  reviewed_date?: string;
+  reviewed_by?: string;
+  approval_notes?: string;
+  rejection_reason?: string;
+  metadata: Record<string, any>;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CreatePartnerApplicationData {
+  email: string;
+  first_name: string;
+  last_name: string;
+  phone?: string;
+  company_name?: string;
+  company_website?: string;
+  experience_level?: string;
+  marketing_experience?: string;
+  why_partner?: string;
+  referral_methods?: string;
+  sponsor_email?: string;
+  requested_partner_level_id?: string;
+}
+
+export interface UpdatePartnerApplicationData {
+  application_status?: string;
+  reviewed_date?: string;
+  reviewed_by?: string;
+  approval_notes?: string;
+  rejection_reason?: string;
+}
+
+export type PartnerApplicationStatus = 'pending' | 'approved' | 'rejected' | 'withdrawn';
+
 /**
  * Initialize partner tables if they don't exist
  */
@@ -82,6 +134,40 @@ export async function initializePartnerTables(): Promise<void> {
         ADD COLUMN IF NOT EXISTS max_referral_depth INTEGER DEFAULT 1;
       `);
     }
+    
+    // Create partner_applications table if it doesn't exist
+    await execute_sql(`
+      CREATE TABLE IF NOT EXISTS partner_applications (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        tenant_id UUID NOT NULL,
+        email VARCHAR(255) NOT NULL,
+        first_name VARCHAR(100) NOT NULL,
+        last_name VARCHAR(100) NOT NULL,
+        phone VARCHAR(20),
+        company_name VARCHAR(200),
+        company_website VARCHAR(255),
+        experience_level VARCHAR(50),
+        marketing_experience TEXT,
+        why_partner TEXT,
+        referral_methods TEXT,
+        sponsor_email VARCHAR(255),
+        sponsor_id UUID,
+        requested_partner_level_id UUID,
+        application_status VARCHAR(20) DEFAULT 'pending' CHECK (application_status IN ('pending', 'approved', 'rejected', 'withdrawn')),
+        application_date DATE DEFAULT CURRENT_DATE,
+        reviewed_date DATE,
+        reviewed_by UUID,
+        approval_notes TEXT,
+        rejection_reason TEXT,
+        metadata JSONB DEFAULT '{}'::jsonb,
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+        
+        CONSTRAINT unique_application_email_per_tenant UNIQUE (tenant_id, email),
+        CONSTRAINT check_application_date_not_future CHECK (application_date <= CURRENT_DATE),
+        CONSTRAINT check_reviewed_date_after_application CHECK (reviewed_date IS NULL OR reviewed_date >= application_date)
+      );
+    `);
     
     console.log('Partner tables initialized successfully');
   } catch (error) {
@@ -373,5 +459,193 @@ export async function getPartnerLevelStats(): Promise<{
   } catch (error) {
     console.error('Error fetching partner level stats:', error);
     return { total: 0, active: 0, inactive: 0 };
+  }
+}
+
+/**
+ * Create a new partner application
+ */
+export async function createPartnerApplication(applicationData: CreatePartnerApplicationData): Promise<string | null> {
+  try {
+    const result = await execute_sql(`
+      INSERT INTO partner_applications (
+        tenant_id, email, first_name, last_name, phone, company_name, 
+        company_website, experience_level, marketing_experience, why_partner, 
+        referral_methods, sponsor_email, requested_partner_level_id
+      )
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+      RETURNING id;
+    `, [
+      '00000000-0000-0000-0000-000000000000', // Default tenant for now
+      applicationData.email,
+      applicationData.first_name,
+      applicationData.last_name,
+      applicationData.phone || null,
+      applicationData.company_name || null,
+      applicationData.company_website || null,
+      applicationData.experience_level || null,
+      applicationData.marketing_experience || null,
+      applicationData.why_partner || null,
+      applicationData.referral_methods || null,
+      applicationData.sponsor_email || null,
+      applicationData.requested_partner_level_id || null,
+    ]);
+
+    return result.rows[0]?.id || null;
+  } catch (error: any) {
+    console.error('Error creating partner application:', error);
+    
+    // Handle unique constraint violations
+    if (error.code === '23505') {
+      if (error.constraint?.includes('email')) {
+        throw new Error('An application with this email already exists');
+      }
+    }
+    
+    return null;
+  }
+}
+
+/**
+ * Get all partner applications
+ */
+export async function getAllPartnerApplications(): Promise<PartnerApplication[]> {
+  try {
+    const result = await execute_sql(`
+      SELECT 
+        id, tenant_id, email, first_name, last_name, phone, company_name,
+        company_website, experience_level, marketing_experience, why_partner,
+        referral_methods, sponsor_email, sponsor_id, requested_partner_level_id,
+        application_status, application_date, reviewed_date, reviewed_by,
+        approval_notes, rejection_reason, metadata, created_at, updated_at
+      FROM partner_applications 
+      ORDER BY created_at DESC;
+    `);
+
+    return result.rows.map((row: any) => ({
+      ...row,
+      metadata: row.metadata || {},
+    }));
+  } catch (error) {
+    console.error('Error fetching partner applications:', error);
+    return [];
+  }
+}
+
+/**
+ * Get pending partner applications
+ */
+export async function getPendingPartnerApplications(): Promise<PartnerApplication[]> {
+  try {
+    const result = await execute_sql(`
+      SELECT 
+        id, tenant_id, email, first_name, last_name, phone, company_name,
+        company_website, experience_level, marketing_experience, why_partner,
+        referral_methods, sponsor_email, sponsor_id, requested_partner_level_id,
+        application_status, application_date, reviewed_date, reviewed_by,
+        approval_notes, rejection_reason, metadata, created_at, updated_at
+      FROM partner_applications 
+      WHERE application_status = 'pending'
+      ORDER BY created_at DESC;
+    `);
+
+    return result.rows.map((row: any) => ({
+      ...row,
+      metadata: row.metadata || {},
+    }));
+  } catch (error) {
+    console.error('Error fetching pending partner applications:', error);
+    return [];
+  }
+}
+
+/**
+ * Get a specific partner application by ID
+ */
+export async function getPartnerApplication(applicationId: string): Promise<PartnerApplication | null> {
+  try {
+    const result = await execute_sql(`
+      SELECT 
+        id, tenant_id, email, first_name, last_name, phone, company_name,
+        company_website, experience_level, marketing_experience, why_partner,
+        referral_methods, sponsor_email, sponsor_id, requested_partner_level_id,
+        application_status, application_date, reviewed_date, reviewed_by,
+        approval_notes, rejection_reason, metadata, created_at, updated_at
+      FROM partner_applications 
+      WHERE id = $1;
+    `, [applicationId]);
+
+    if (result.rows.length === 0) {
+      return null;
+    }
+
+    const row = result.rows[0];
+    return {
+      ...row,
+      metadata: row.metadata || {},
+    };
+  } catch (error) {
+    console.error('Error fetching partner application:', error);
+    return null;
+  }
+}
+
+/**
+ * Update partner application status (approve/reject)
+ */
+export async function updatePartnerApplicationStatus(
+  applicationId: string, 
+  status: PartnerApplicationStatus, 
+  reviewedBy: string,
+  notes?: string
+): Promise<boolean> {
+  try {
+    const result = await execute_sql(`
+      UPDATE partner_applications 
+      SET 
+        application_status = $1, 
+        reviewed_date = CURRENT_DATE,
+        reviewed_by = $2,
+        ${status === 'approved' ? 'approval_notes' : 'rejection_reason'} = $3,
+        updated_at = CURRENT_TIMESTAMP
+      WHERE id = $4;
+    `, [status, reviewedBy, notes || null, applicationId]);
+
+    return result.rowCount > 0;
+  } catch (error) {
+    console.error('Error updating partner application status:', error);
+    return false;
+  }
+}
+
+/**
+ * Get partner application statistics
+ */
+export async function getPartnerApplicationStats(): Promise<{
+  total: number;
+  pending: number;
+  approved: number;
+  rejected: number;
+}> {
+  try {
+    const result = await execute_sql(`
+      SELECT 
+        COUNT(*) as total,
+        COUNT(CASE WHEN application_status = 'pending' THEN 1 END) as pending,
+        COUNT(CASE WHEN application_status = 'approved' THEN 1 END) as approved,
+        COUNT(CASE WHEN application_status = 'rejected' THEN 1 END) as rejected
+      FROM partner_applications;
+    `);
+
+    const stats = result.rows[0];
+    return {
+      total: parseInt(stats.total) || 0,
+      pending: parseInt(stats.pending) || 0,
+      approved: parseInt(stats.approved) || 0,
+      rejected: parseInt(stats.rejected) || 0,
+    };
+  } catch (error) {
+    console.error('Error fetching partner application stats:', error);
+    return { total: 0, pending: 0, approved: 0, rejected: 0 };
   }
 }

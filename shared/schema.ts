@@ -136,6 +136,52 @@ export const PARTNER_RELATIONS_TABLE_SQL = `
   );
 `;
 
+export const PARTNER_APPLICATIONS_TABLE_SQL = `
+  CREATE TABLE IF NOT EXISTS partner_applications (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    tenant_id UUID NOT NULL,
+    email VARCHAR(255) NOT NULL,
+    first_name VARCHAR(100) NOT NULL,
+    last_name VARCHAR(100) NOT NULL,
+    phone VARCHAR(20),
+    company_name VARCHAR(200),
+    company_website VARCHAR(255),
+    experience_level VARCHAR(50),
+    marketing_experience TEXT,
+    why_partner TEXT,
+    referral_methods TEXT,
+    sponsor_email VARCHAR(255),
+    sponsor_id UUID,
+    requested_partner_level_id UUID,
+    application_status VARCHAR(20) DEFAULT 'pending' CHECK (application_status IN ('pending', 'approved', 'rejected', 'withdrawn')),
+    application_date DATE DEFAULT CURRENT_DATE,
+    reviewed_date DATE,
+    reviewed_by UUID,
+    approval_notes TEXT,
+    rejection_reason TEXT,
+    metadata JSONB DEFAULT '{}'::jsonb,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    
+    -- Multi-tenant constraints
+    CONSTRAINT fk_partner_applications_tenant FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
+    CONSTRAINT fk_partner_applications_sponsor FOREIGN KEY (sponsor_id) REFERENCES partners(id) ON DELETE SET NULL,
+    CONSTRAINT fk_partner_applications_level FOREIGN KEY (requested_partner_level_id) REFERENCES partner_levels(id) ON DELETE SET NULL,
+    
+    -- Unique constraints scoped by tenant
+    CONSTRAINT unique_application_email_per_tenant UNIQUE (tenant_id, email),
+    
+    -- Data integrity constraints
+    CONSTRAINT check_application_date_not_future CHECK (application_date <= CURRENT_DATE),
+    CONSTRAINT check_reviewed_date_after_application CHECK (reviewed_date IS NULL OR reviewed_date >= application_date),
+    CONSTRAINT check_reviewed_status_consistency CHECK (
+      (application_status = 'pending' AND reviewed_date IS NULL AND reviewed_by IS NULL) OR
+      (application_status IN ('approved', 'rejected') AND reviewed_date IS NOT NULL AND reviewed_by IS NOT NULL) OR
+      (application_status = 'withdrawn')
+    )
+  );
+`;
+
 // Indexes for performance optimization
 export const PARTNER_LEVELS_INDEXES_SQL = `
   CREATE INDEX IF NOT EXISTS idx_partner_levels_tenant_id ON partner_levels(tenant_id);
@@ -163,6 +209,17 @@ export const PARTNER_RELATIONS_INDEXES_SQL = `
   CREATE INDEX IF NOT EXISTS idx_partner_relations_type ON partner_relations(tenant_id, relationship_type);
   CREATE INDEX IF NOT EXISTS idx_partner_relations_status ON partner_relations(tenant_id, status);
   CREATE INDEX IF NOT EXISTS idx_partner_relations_path_gin ON partner_relations USING GIN (to_tsvector('english', path));
+`;
+
+export const PARTNER_APPLICATIONS_INDEXES_SQL = `
+  CREATE INDEX IF NOT EXISTS idx_partner_applications_tenant_id ON partner_applications(tenant_id);
+  CREATE INDEX IF NOT EXISTS idx_partner_applications_status ON partner_applications(tenant_id, application_status);
+  CREATE INDEX IF NOT EXISTS idx_partner_applications_email ON partner_applications(tenant_id, email);
+  CREATE INDEX IF NOT EXISTS idx_partner_applications_sponsor ON partner_applications(sponsor_id);
+  CREATE INDEX IF NOT EXISTS idx_partner_applications_level ON partner_applications(requested_partner_level_id);
+  CREATE INDEX IF NOT EXISTS idx_partner_applications_date ON partner_applications(application_date);
+  CREATE INDEX IF NOT EXISTS idx_partner_applications_reviewed ON partner_applications(reviewed_date);
+  CREATE INDEX IF NOT EXISTS idx_partner_applications_created_at ON partner_applications(created_at);
 `;
 
 // Triggers for automatic updated_at timestamp updates
@@ -196,6 +253,14 @@ export const PARTNER_RELATIONS_TRIGGERS_SQL = `
   DROP TRIGGER IF EXISTS trigger_update_partner_relations_updated_at ON partner_relations;
   CREATE TRIGGER trigger_update_partner_relations_updated_at
     BEFORE UPDATE ON partner_relations
+    FOR EACH ROW
+    EXECUTE FUNCTION update_updated_at_column();
+`;
+
+export const PARTNER_APPLICATIONS_TRIGGERS_SQL = `
+  DROP TRIGGER IF EXISTS trigger_update_partner_applications_updated_at ON partner_applications;
+  CREATE TRIGGER trigger_update_partner_applications_updated_at
+    BEFORE UPDATE ON partner_applications
     FOR EACH ROW
     EXECUTE FUNCTION update_updated_at_column();
 `;
@@ -242,13 +307,15 @@ export const PARTNER_COMMISSION_RATE_TRIGGER_SQL = `
 export const ALL_PARTNER_TABLES_SQL = [
   PARTNER_LEVELS_TABLE_SQL,
   PARTNERS_TABLE_SQL,
-  PARTNER_RELATIONS_TABLE_SQL
+  PARTNER_RELATIONS_TABLE_SQL,
+  PARTNER_APPLICATIONS_TABLE_SQL
 ].join('\n\n');
 
 export const ALL_PARTNER_INDEXES_SQL = [
   PARTNER_LEVELS_INDEXES_SQL,
   PARTNERS_INDEXES_SQL,
-  PARTNER_RELATIONS_INDEXES_SQL
+  PARTNER_RELATIONS_INDEXES_SQL,
+  PARTNER_APPLICATIONS_INDEXES_SQL
 ].join('\n\n');
 
 export const ALL_PARTNER_TRIGGERS_SQL = [
@@ -256,5 +323,6 @@ export const ALL_PARTNER_TRIGGERS_SQL = [
   PARTNER_LEVELS_TRIGGERS_SQL,
   PARTNERS_TRIGGERS_SQL,
   PARTNER_RELATIONS_TRIGGERS_SQL,
+  PARTNER_APPLICATIONS_TRIGGERS_SQL,
   PARTNER_COMMISSION_RATE_TRIGGER_SQL
 ].join('\n\n');
