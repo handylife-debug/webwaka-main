@@ -1,63 +1,47 @@
+import { getAllAdminUsers, getActivityLog } from '@/lib/user-management';
 import type { Metadata } from 'next';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { Users, Shield, UserPlus, Activity } from 'lucide-react';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Users, Shield, UserPlus, Activity, Clock } from 'lucide-react';
 import { rootDomain } from '@/lib/utils';
+import { AdminUsersTable } from '@/components/admin/admin-users-table';
+import { ActivityLogTable } from '@/components/admin/activity-log-table';
+import { UserManagementClient } from './user-management-client';
 
 export const metadata: Metadata = {
   title: `User Management | ${rootDomain}`,
-  description: `Manage users and permissions for ${rootDomain}`
+  description: `Manage administrative users and view activity logs for ${rootDomain}`
 };
 
-// Mock user data - replace with real data from your user management system
-const mockUsers = [
-  {
-    id: '1',
-    name: 'John Doe',
-    email: 'john@example.com',
-    role: 'SuperAdmin',
-    status: 'Active',
-    lastActive: new Date('2024-01-15'),
-    tenant: 'Global',
-  },
-  {
-    id: '2',
-    name: 'Jane Smith',
-    email: 'jane@tenant1.example.com',
-    role: 'Admin',
-    status: 'Active',
-    lastActive: new Date('2024-01-14'),
-    tenant: 'tenant1',
-  },
-  {
-    id: '3',
-    name: 'Bob Wilson',
-    email: 'bob@tenant2.example.com',
-    role: 'User',
-    status: 'Inactive',
-    lastActive: new Date('2024-01-10'),
-    tenant: 'tenant2',
-  },
-];
+export default async function UsersPage() {
+  let users: Awaited<ReturnType<typeof getAllAdminUsers>> = [];
+  let activities: Awaited<ReturnType<typeof getActivityLog>> = [];
+  let error: string | null = null;
 
-function getRoleColor(role: string) {
-  switch (role) {
-    case 'SuperAdmin':
-      return 'bg-red-100 text-red-800';
-    case 'Admin':
-      return 'bg-blue-100 text-blue-800';
-    default:
-      return 'bg-gray-100 text-gray-800';
+  try {
+    // Fetch both users and activity logs
+    [users, activities] = await Promise.all([
+      getAllAdminUsers(),
+      getActivityLog(100), // Get last 100 activities
+    ]);
+  } catch (err) {
+    console.error('Error fetching user management data:', err);
+    error = 'Failed to load user management data. Please check your database connection.';
+    users = [];
+    activities = [];
   }
-}
 
-function getStatusColor(status: string) {
-  return status === 'Active' 
-    ? 'bg-green-100 text-green-800'
-    : 'bg-gray-100 text-gray-800';
-}
+  // Calculate stats
+  const stats = {
+    total: users.length,
+    active: users.filter(u => u.status === 'Active').length,
+    pending: users.filter(u => u.status === 'Pending').length,
+    recentActivity: activities.filter(a => {
+      const dayAgo = Date.now() - (24 * 60 * 60 * 1000);
+      return a.timestamp > dayAgo;
+    }).length,
+  };
 
-export default function UsersPage() {
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -65,14 +49,22 @@ export default function UsersPage() {
         <div>
           <h2 className="text-3xl font-bold tracking-tight">User Management</h2>
           <p className="text-gray-600 mt-1">
-            Manage user accounts, roles, and permissions across your platform.
+            Manage platform administrators, send invitations, and monitor administrative activity.
           </p>
         </div>
-        <Button className="flex items-center gap-2">
-          <UserPlus className="h-4 w-4" />
-          Add New User
-        </Button>
       </div>
+
+      {/* Error Alert */}
+      {error && (
+        <div className="bg-red-50 border border-red-200 text-red-800 px-4 py-3 rounded-lg mb-6">
+          <div className="flex">
+            <div className="ml-3">
+              <h3 className="text-sm font-medium">Database Error</h3>
+              <div className="text-sm mt-1">{error}</div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Stats */}
       <div className="grid gap-4 md:grid-cols-4">
@@ -82,94 +74,73 @@ export default function UsersPage() {
             <Users className="h-4 w-4 text-blue-500" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{mockUsers.length}</div>
-            <p className="text-xs text-muted-foreground">Across all tenants</p>
+            <div className="text-2xl font-bold">{stats.total}</div>
+            <p className="text-xs text-muted-foreground">All administrators</p>
           </CardContent>
         </Card>
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Active Users</CardTitle>
-            <Activity className="h-4 w-4 text-green-500" />
+            <CardTitle className="text-sm font-medium">Active</CardTitle>
+            <Shield className="h-4 w-4 text-green-500" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">
-              {mockUsers.filter(u => u.status === 'Active').length}
-            </div>
-            <p className="text-xs text-muted-foreground">Currently active</p>
+            <div className="text-2xl font-bold">{stats.active}</div>
+            <p className="text-xs text-muted-foreground">Active users</p>
           </CardContent>
         </Card>
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Super Admins</CardTitle>
-            <Shield className="h-4 w-4 text-red-500" />
+            <CardTitle className="text-sm font-medium">Pending</CardTitle>
+            <UserPlus className="h-4 w-4 text-yellow-500" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">
-              {mockUsers.filter(u => u.role === 'SuperAdmin').length}
-            </div>
-            <p className="text-xs text-muted-foreground">System administrators</p>
+            <div className="text-2xl font-bold">{stats.pending}</div>
+            <p className="text-xs text-muted-foreground">Pending invitations</p>
           </CardContent>
         </Card>
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Admins</CardTitle>
-            <Shield className="h-4 w-4 text-blue-500" />
+            <CardTitle className="text-sm font-medium">Activity (24h)</CardTitle>
+            <Activity className="h-4 w-4 text-purple-500" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">
-              {mockUsers.filter(u => u.role === 'Admin').length}
-            </div>
-            <p className="text-xs text-muted-foreground">Tenant administrators</p>
+            <div className="text-2xl font-bold">{stats.recentActivity}</div>
+            <p className="text-xs text-muted-foreground">Recent actions</p>
           </CardContent>
         </Card>
       </div>
 
-      {/* User List */}
+      {/* Main Content */}
       <Card>
         <CardHeader>
-          <CardTitle>All Users</CardTitle>
+          <CardTitle>Administrative Users & Activity</CardTitle>
         </CardHeader>
-        <CardContent>
-          <div className="space-y-4">
-            {mockUsers.map((user) => (
-              <div
-                key={user.id}
-                className="flex items-center justify-between p-4 border rounded-lg hover:bg-gray-50 transition-colors"
-              >
-                <div className="flex items-center gap-4">
-                  <div className="h-10 w-10 bg-blue-100 rounded-full flex items-center justify-center">
-                    <Users className="h-5 w-5 text-blue-600" />
-                  </div>
-                  <div>
-                    <h3 className="font-medium">{user.name}</h3>
-                    <p className="text-sm text-gray-500">{user.email}</p>
-                    <div className="flex items-center gap-2 mt-1">
-                      <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getRoleColor(user.role)}`}>
-                        {user.role}
-                      </span>
-                      <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getStatusColor(user.status)}`}>
-                        {user.status}
-                      </span>
-                      <span className="text-xs text-gray-400">
-                        Tenant: {user.tenant}
-                      </span>
-                    </div>
-                  </div>
+        <CardContent className="p-0">
+          <Tabs defaultValue="users" className="w-full">
+            <div className="px-6 pt-6">
+              <TabsList className="grid w-full grid-cols-2">
+                <TabsTrigger value="users">Users ({users.length})</TabsTrigger>
+                <TabsTrigger value="activity">Activity Log ({activities.length})</TabsTrigger>
+              </TabsList>
+            </div>
+            
+            <TabsContent value="users" className="mt-0 p-6">
+              <UserManagementClient 
+                users={users} 
+                activities={activities}
+              />
+            </TabsContent>
+            
+            <TabsContent value="activity" className="mt-0 p-6">
+              <div className="space-y-4">
+                <div className="flex items-center gap-2 text-sm text-gray-600">
+                  <Clock className="h-4 w-4" />
+                  Showing last {activities.length} administrative actions
                 </div>
-                <div className="flex items-center gap-2">
-                  <div className="text-right">
-                    <p className="text-sm text-gray-500">Last active</p>
-                    <p className="text-xs text-gray-400">
-                      {user.lastActive.toLocaleDateString()}
-                    </p>
-                  </div>
-                  <Button variant="outline" size="sm">
-                    Manage
-                  </Button>
-                </div>
+                <ActivityLogTable activities={activities} />
               </div>
-            ))}
-          </div>
+            </TabsContent>
+          </Tabs>
         </CardContent>
       </Card>
     </div>
