@@ -13,7 +13,8 @@ import {
   ChevronLeft,
   Shield,
   Key,
-  CreditCard
+  CreditCard,
+  Handshake
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
@@ -42,6 +43,11 @@ const navigation = [
     name: 'Plans',
     href: '/admin/plans',
     icon: CreditCard,
+  },
+  {
+    name: 'Partner Management',
+    href: '/admin/partners',
+    icon: Handshake,
   },
   {
     name: 'Credentials',
