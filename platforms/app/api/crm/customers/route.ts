@@ -3,9 +3,20 @@ import { execute_sql } from '../../../../lib/database'
 import { getTenantContext, validateTenantAccess } from '../../../../lib/tenant-context'
 import { z } from 'zod'
 
+// Valid columns for sorting customers
+const VALID_SORT_COLUMNS = [
+  'id', 'customer_code', 'email', 'first_name', 'last_name', 'phone', 'mobile',
+  'company_name', 'customer_status', 'customer_type', 'preferred_contact_method',
+  'total_purchases', 'total_orders', 'last_purchase_date', 'loyalty_points',
+  'created_at', 'updated_at'
+] as const;
+
+// Valid sort orders
+const VALID_SORT_ORDERS = ['ASC', 'DESC'] as const;
+
 // Customer validation schema
 const customerSchema = z.object({
-  customer_code: z.string().min(1).max(50),
+  customer_code: z.string().min(1).max(50).optional(),
   email: z.string().email(),
   first_name: z.string().min(1).max(100),
   last_name: z.string().min(1).max(100),
@@ -60,8 +71,13 @@ export async function GET(request: NextRequest) {
     const search = searchParams.get('search') || '';
     const status = searchParams.get('status') || '';
     const type = searchParams.get('type') || '';
-    const sortBy = searchParams.get('sortBy') || 'created_at';
-    const sortOrder = searchParams.get('sortOrder') || 'DESC';
+    
+    // Validate and sanitize sorting parameters
+    const requestedSortBy = searchParams.get('sortBy') || 'created_at';
+    const requestedSortOrder = (searchParams.get('sortOrder') || 'DESC').toUpperCase();
+    
+    const sortBy = VALID_SORT_COLUMNS.includes(requestedSortBy as any) ? requestedSortBy : 'created_at';
+    const sortOrder = VALID_SORT_ORDERS.includes(requestedSortOrder as any) ? requestedSortOrder : 'DESC';
     
     // Build WHERE clause
     let whereConditions = ['tenant_id = $1'];
