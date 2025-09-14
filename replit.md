@@ -18,12 +18,12 @@ Preferred communication style: Simple, everyday language.
 - **Server Actions**: Next.js server actions for form handling and data mutations
 - **Middleware**: Custom middleware (`middleware.ts`) for subdomain extraction and routing logic
 - **Authentication**: Mock authentication system with role-based access control (SuperAdmin, Admin, User)
-- **Data Storage**: Redis-based storage for tenant data using Upstash Redis
+- **Data Storage**: PostgreSQL database for structured data with Redis caching for tenant data using Upstash Redis
 
 ## Multi-Tenant Implementation
 - **Subdomain Routing**: Automatic subdomain detection supporting both local development (`subdomain.localhost:3000`) and production environments
 - **Tenant Isolation**: Each subdomain serves isolated content while sharing core application infrastructure
-- **Admin Panel**: Protected admin interface at `/admin` with tenant management capabilities
+- **Admin Panel**: Protected admin interface at `/admin` with tenant management and partner onboarding capabilities
 - **Vercel Preview Support**: Special handling for Vercel preview deployments with subdomain format `tenant---branch.vercel.app`
 
 ## Authentication & Authorization
@@ -38,6 +38,13 @@ Preferred communication style: Simple, everyday language.
 - **Data Validation**: Input sanitization and emoji validation for tenant customization
 - **Error Handling**: Graceful error handling with user-friendly error messages
 
+## Partner Management System
+- **Partner Onboarding**: Public partner registration at `/partner-registration` with comprehensive application form
+- **Application Workflow**: SuperAdmin approval system with detailed application review and status tracking
+- **Partnership Levels**: Multi-tier partner system (Bronze, Silver, Gold, Platinum) with commission tracking
+- **Referral System**: Complete referral tracking with commission calculations and activity logging
+- **SuperAdmin Controls**: Dedicated interface for managing partner applications, approvals, and rejections
+
 # External Dependencies
 
 ## Core Framework
@@ -46,7 +53,9 @@ Preferred communication style: Simple, everyday language.
 - **TypeScript**: Type safety across the application
 
 ## Database & Storage
-- **Upstash Redis**: Cloud Redis service for tenant data storage
+- **PostgreSQL**: Primary database for structured data including partner applications and tenant management
+- **Drizzle ORM**: Type-safe database ORM with schema management
+- **Upstash Redis**: Cloud Redis service for tenant data storage and caching
 - **@upstash/redis**: Redis client library for data operations
 
 ## UI & Styling
