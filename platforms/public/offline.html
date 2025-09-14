@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>POS Manager - Offline</title>
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background-color: #f9fafb;
+            color: #374151;
+            line-height: 1.6;
+        }
+        
+        .container {
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 1rem;
+        }
+        
+        .offline-card {
+            background: white;
+            border-radius: 0.75rem;
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);
+            padding: 2rem;
+            text-align: center;
+            max-width: 28rem;
+            width: 100%;
+        }
+        
+        .offline-icon {
+            width: 4rem;
+            height: 4rem;
+            background: #e5e7eb;
+            border-radius: 50%;
+            margin: 0 auto 1.5rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.5rem;
+        }
+        
+        .title {
+            font-size: 1.5rem;
+            font-weight: 700;
+            color: #111827;
+            margin-bottom: 0.5rem;
+        }
+        
+        .description {
+            color: #6b7280;
+            margin-bottom: 1.5rem;
+        }
+        
+        .features {
+            background: #eff6ff;
+            border: 1px solid #dbeafe;
+            border-radius: 0.5rem;
+            padding: 1rem;
+            margin-bottom: 1.5rem;
+        }
+        
+        .features-title {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 600;
+            color: #1e40af;
+            margin-bottom: 0.5rem;
+        }
+        
+        .features-list {
+            list-style: none;
+            color: #1e3a8a;
+            font-size: 0.875rem;
+        }
+        
+        .features-list li {
+            margin-bottom: 0.25rem;
+        }
+        
+        .button {
+            background: #2563eb;
+            color: white;
+            border: none;
+            padding: 0.75rem 1.5rem;
+            border-radius: 0.5rem;
+            font-weight: 600;
+            cursor: pointer;
+            width: 100%;
+            margin-bottom: 0.75rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            text-decoration: none;
+            transition: background-color 0.2s;
+        }
+        
+        .button:hover {
+            background: #1d4ed8;
+        }
+        
+        .button-secondary {
+            background: #e5e7eb;
+            color: #374151;
+        }
+        
+        .button-secondary:hover {
+            background: #d1d5db;
+        }
+        
+        .sync-note {
+            font-size: 0.75rem;
+            color: #6b7280;
+            margin-top: 1.5rem;
+        }
+        
+        .icon {
+            margin-right: 0.5rem;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="offline-card">
+            <div class="offline-icon">📶</div>
+            <h1 class="title">You're Offline</h1>
+            <p class="description">
+                No internet connection detected. The POS system is running in offline mode.
+            </p>
+            
+            <div class="features">
+                <div class="features-title">
+                    <span class="icon">📱</span>
+                    Offline Features Available
+                </div>
+                <ul class="features-list">
+                    <li>• Browse cached products</li>
+                    <li>• Process sales (will sync when online)</li>
+                    <li>• View dashboard data</li>
+                    <li>• Access offline inventory</li>
+                </ul>
+            </div>
+            
+            <button class="button" onclick="window.location.reload()">
+                <span class="icon">🔄</span>
+                Try Again
+            </button>
+            
+            <button class="button button-secondary" onclick="window.history.back()">
+                Go Back
+            </button>
+            
+            <div class="sync-note">
+                Your data will be automatically synced when connection is restored.
+            </div>
+        </div>
+    </div>
+</body>
+</html>

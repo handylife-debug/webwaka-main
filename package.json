@@ -11,6 +11,7 @@
   "license": "ISC",
   "dependencies": {
     "@types/pg": "^8.15.5",
+    "next-pwa": "^5.6.0",
     "pg": "^8.16.3",
     "zod": "^4.1.8"
   }
