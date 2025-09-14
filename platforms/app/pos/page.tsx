@@ -3,6 +3,8 @@
 import { useState, useEffect } from 'react'
 import { ShoppingCart, Search, Menu, CreditCard, DollarSign, Package, Users, BarChart3, Minus, Plus, X } from 'lucide-react'
 import TransactionProcessingCell, { PaymentResult, SplitPayment, DraftSale } from './components/TransactionProcessingCell'
+import PromotionsCell, { AppliedPromotion } from './components/PromotionsCell'
+import TaxAndFeeCell, { TaxCalculation, FeeCalculation } from './components/TaxAndFeeCell'
 
 interface Product {
   id: string
@@ -39,6 +41,16 @@ export default function POSPage() {
   const [showTransactionProcessing, setShowTransactionProcessing] = useState(false)
   const [draftSales, setDraftSales] = useState<DraftSale[]>([])
   const [showDraftSales, setShowDraftSales] = useState(false)
+  const [showPromotions, setShowPromotions] = useState(false)
+  const [showTaxAndFees, setShowTaxAndFees] = useState(false)
+  
+  // Promotions and Tax state
+  const [appliedPromotions, setAppliedPromotions] = useState<AppliedPromotion[]>([])
+  const [calculatedTaxes, setCalculatedTaxes] = useState<TaxCalculation[]>([])
+  const [calculatedFees, setCalculatedFees] = useState<FeeCalculation[]>([])
+  const [discountedSubtotal, setDiscountedSubtotal] = useState(0)
+  const [totalTax, setTotalTax] = useState(0)
+  const [totalFees, setTotalFees] = useState(0)
 
   // Load cart from localStorage on mount
   useEffect(() => {
@@ -118,8 +130,12 @@ export default function POSPage() {
     setCart(prev => prev.filter(item => item.id !== id))
   }
 
-  const cartTotal = cart.reduce((sum, item) => sum + (item.price * item.quantity), 0)
+  const baseSubtotal = cart.reduce((sum, item) => sum + (item.price * item.quantity), 0)
   const cartItemCount = cart.reduce((sum, item) => sum + item.quantity, 0)
+  
+  // Use discounted subtotal if promotions are applied, otherwise use base subtotal
+  const effectiveSubtotal = discountedSubtotal > 0 ? discountedSubtotal : baseSubtotal
+  const cartTotal = effectiveSubtotal + totalTax + totalFees
 
   const clearCart = () => {
     setCart([])
@@ -212,6 +228,29 @@ export default function POSPage() {
     setDraftSales(prev => [...prev, draft])
     localStorage.setItem('pos-draft-sales', JSON.stringify([...draftSales, draft]))
     alert(`Draft sale saved for ${draft.customerInfo?.name || 'Customer'}\nSale ID: ${draft.id}`)
+  }
+
+  const handlePromotionsApplied = (promotions: AppliedPromotion[], newSubtotal: number) => {
+    setAppliedPromotions(promotions)
+    setDiscountedSubtotal(newSubtotal)
+  }
+
+  const handleTaxAndFeesCalculated = (
+    taxes: TaxCalculation[], 
+    fees: FeeCalculation[], 
+    newSubtotal: number,
+    taxAmount: number,
+    feeAmount: number
+  ) => {
+    setCalculatedTaxes(taxes)
+    setCalculatedFees(fees)
+    setTotalTax(taxAmount)
+    setTotalFees(feeAmount)
+    
+    // If taxes change the subtotal (for inclusive taxes), update it
+    if (newSubtotal !== effectiveSubtotal) {
+      setDiscountedSubtotal(newSubtotal)
+    }
   }
 
   return (
@@ -419,18 +458,57 @@ export default function POSPage() {
           {/* Cart Summary & Checkout */}
           {cart.length > 0 && (
             <div className="border-t border-gray-200 p-4 space-y-4">
+              {/* Promotion and Tax Management Buttons */}
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  onClick={() => setShowPromotions(true)}
+                  className="bg-purple-600 text-white py-2 px-3 rounded-lg text-sm font-medium hover:bg-purple-700 transition-colors flex items-center justify-center"
+                >
+                  🎯 Promotions
+                </button>
+                <button
+                  onClick={() => setShowTaxAndFees(true)}
+                  className="bg-orange-600 text-white py-2 px-3 rounded-lg text-sm font-medium hover:bg-orange-700 transition-colors flex items-center justify-center"
+                >
+                  🧾 Tax & Fees
+                </button>
+              </div>
+
               <div className="space-y-2">
                 <div className="flex justify-between text-sm">
                   <span>Subtotal:</span>
-                  <span>${cartTotal.toFixed(2)}</span>
+                  <span>${baseSubtotal.toFixed(2)}</span>
                 </div>
-                <div className="flex justify-between text-sm">
-                  <span>Tax (8.5%):</span>
-                  <span>${(cartTotal * 0.085).toFixed(2)}</span>
-                </div>
+                
+                {/* Promotions */}
+                {appliedPromotions.length > 0 && (
+                  <div className="text-sm text-green-600">
+                    <div className="flex justify-between">
+                      <span>Promotions:</span>
+                      <span>-${(baseSubtotal - effectiveSubtotal).toFixed(2)}</span>
+                    </div>
+                  </div>
+                )}
+
+                {/* Taxes */}
+                {calculatedTaxes.length > 0 && calculatedTaxes.map(tax => (
+                  <div key={tax.id} className="flex justify-between text-sm text-blue-600">
+                    <span>{tax.name}:</span>
+                    <span>${tax.amount.toFixed(2)}</span>
+                  </div>
+                ))}
+
+                {/* Fees */}
+                {calculatedFees.length > 0 && calculatedFees.map(fee => (
+                  <div key={fee.id} className="flex justify-between text-sm text-orange-600">
+                    <span>{fee.name}:</span>
+                    <span>${fee.amount.toFixed(2)}</span>
+                  </div>
+                ))}
+
                 <div className="flex justify-between text-lg font-bold border-t pt-2">
                   <span>Total:</span>
-                  <span>${(cartTotal * 1.085).toFixed(2)}</span>
+                  <span>${cartTotal.toFixed(2)}</span>
                 </div>
               </div>
 
@@ -568,18 +646,57 @@ export default function POSPage() {
             {/* Mobile Cart Summary & Checkout */}
             {cart.length > 0 && (
               <div className="border-t border-gray-200 p-4 space-y-4">
+                {/* Mobile Promotion and Tax Management Buttons */}
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    onClick={() => setShowPromotions(true)}
+                    className="bg-purple-600 text-white py-2 px-3 rounded-lg text-sm font-medium hover:bg-purple-700 transition-colors flex items-center justify-center"
+                  >
+                    🎯 Promotions
+                  </button>
+                  <button
+                    onClick={() => setShowTaxAndFees(true)}
+                    className="bg-orange-600 text-white py-2 px-3 rounded-lg text-sm font-medium hover:bg-orange-700 transition-colors flex items-center justify-center"
+                  >
+                    🧾 Tax & Fees
+                  </button>
+                </div>
+
                 <div className="space-y-2">
                   <div className="flex justify-between text-sm">
                     <span>Subtotal:</span>
-                    <span>${cartTotal.toFixed(2)}</span>
+                    <span>${baseSubtotal.toFixed(2)}</span>
                   </div>
-                  <div className="flex justify-between text-sm">
-                    <span>Tax (8.5%):</span>
-                    <span>${(cartTotal * 0.085).toFixed(2)}</span>
-                  </div>
+                  
+                  {/* Promotions */}
+                  {appliedPromotions.length > 0 && (
+                    <div className="text-sm text-green-600">
+                      <div className="flex justify-between">
+                        <span>Promotions:</span>
+                        <span>-${(baseSubtotal - effectiveSubtotal).toFixed(2)}</span>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Taxes */}
+                  {calculatedTaxes.length > 0 && calculatedTaxes.map(tax => (
+                    <div key={tax.id} className="flex justify-between text-sm text-blue-600">
+                      <span>{tax.name}:</span>
+                      <span>${tax.amount.toFixed(2)}</span>
+                    </div>
+                  ))}
+
+                  {/* Fees */}
+                  {calculatedFees.length > 0 && calculatedFees.map(fee => (
+                    <div key={fee.id} className="flex justify-between text-sm text-orange-600">
+                      <span>{fee.name}:</span>
+                      <span>${fee.amount.toFixed(2)}</span>
+                    </div>
+                  ))}
+
                   <div className="flex justify-between text-lg font-bold border-t pt-2">
                     <span>Total:</span>
-                    <span>${(cartTotal * 1.085).toFixed(2)}</span>
+                    <span>${cartTotal.toFixed(2)}</span>
                   </div>
                 </div>
 
@@ -711,11 +828,29 @@ export default function POSPage() {
       {/* Transaction Processing Cell */}
       <TransactionProcessingCell
         cartItems={cart}
-        total={cartTotal * 1.085}
+        total={cartTotal}
         onPaymentComplete={handlePaymentComplete}
         onSaveDraft={handleSaveDraft}
         isVisible={showTransactionProcessing}
         onClose={() => setShowTransactionProcessing(false)}
+      />
+
+      {/* Promotions Cell */}
+      <PromotionsCell
+        cartItems={cart}
+        subtotal={baseSubtotal}
+        onPromotionsApplied={handlePromotionsApplied}
+        isVisible={showPromotions}
+        onClose={() => setShowPromotions(false)}
+      />
+
+      {/* Tax and Fee Cell */}
+      <TaxAndFeeCell
+        cartItems={cart}
+        subtotal={effectiveSubtotal}
+        onTaxAndFeesCalculated={handleTaxAndFeesCalculated}
+        isVisible={showTaxAndFees}
+        onClose={() => setShowTaxAndFees(false)}
       />
     </div>
   )
