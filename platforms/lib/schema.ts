@@ -1535,6 +1535,841 @@ export const PO_RECEIPT_STOCK_TRIGGER_SQL = `
     EXECUTE FUNCTION update_stock_on_po_receipt();
 `;
 
+// ================================================================
+// PEOPLE MANAGEMENT SYSTEM - CRM, STAFF MANAGEMENT & HRM
+// ================================================================
+
+// Customer Relationship Management (CRM) Tables
+
+export const CUSTOMERS_TABLE_SQL = `
+  CREATE TABLE IF NOT EXISTS customers (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    tenant_id UUID NOT NULL,
+    customer_code VARCHAR(50) NOT NULL,
+    email VARCHAR(255) NOT NULL,
+    first_name VARCHAR(100) NOT NULL,
+    last_name VARCHAR(100) NOT NULL,
+    phone VARCHAR(20),
+    mobile VARCHAR(20),
+    date_of_birth DATE,
+    gender VARCHAR(20) CHECK (gender IN ('male', 'female', 'other', 'prefer_not_to_say')),
+    
+    -- Address information
+    billing_address TEXT,
+    billing_city VARCHAR(100),
+    billing_state VARCHAR(100),
+    billing_postal_code VARCHAR(20),
+    billing_country VARCHAR(100),
+    shipping_address TEXT,
+    shipping_city VARCHAR(100),
+    shipping_state VARCHAR(100),
+    shipping_postal_code VARCHAR(20),
+    shipping_country VARCHAR(100),
+    
+    -- Business information
+    company_name VARCHAR(200),
+    tax_id VARCHAR(50),
+    credit_limit DECIMAL(15,2) DEFAULT 0,
+    payment_terms VARCHAR(50) DEFAULT 'cash',
+    
+    -- Customer status and preferences
+    customer_status VARCHAR(20) DEFAULT 'active' CHECK (customer_status IN ('active', 'inactive', 'suspended', 'vip')),
+    customer_type VARCHAR(50) DEFAULT 'individual' CHECK (customer_type IN ('individual', 'business', 'wholesale', 'retail')),
+    preferred_contact_method VARCHAR(20) DEFAULT 'email' CHECK (preferred_contact_method IN ('email', 'sms', 'phone', 'mail')),
+    marketing_consent BOOLEAN DEFAULT false,
+    
+    -- Purchase history summary
+    total_purchases DECIMAL(15,2) DEFAULT 0,
+    total_orders INTEGER DEFAULT 0,
+    first_purchase_date DATE,
+    last_purchase_date DATE,
+    average_order_value DECIMAL(15,2) DEFAULT 0,
+    loyalty_points INTEGER DEFAULT 0,
+    
+    -- Additional information
+    notes TEXT,
+    metadata JSONB DEFAULT '{}'::jsonb,
+    tags TEXT[],
+    
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    created_by UUID,
+    
+    -- Multi-tenant constraints
+    CONSTRAINT fk_customers_tenant FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
+    
+    -- Unique constraints scoped by tenant
+    CONSTRAINT unique_customer_code_per_tenant UNIQUE (tenant_id, customer_code),
+    CONSTRAINT unique_customer_email_per_tenant UNIQUE (tenant_id, email),
+    
+    -- Data integrity constraints
+    CONSTRAINT check_credit_limit_non_negative CHECK (credit_limit >= 0),
+    CONSTRAINT check_purchase_totals_non_negative CHECK (
+      total_purchases >= 0 AND total_orders >= 0 AND average_order_value >= 0 AND loyalty_points >= 0
+    ),
+    CONSTRAINT check_purchase_dates_logical CHECK (
+      first_purchase_date IS NULL OR last_purchase_date IS NULL OR first_purchase_date <= last_purchase_date
+    )
+  );
+`;
+
+export const CUSTOMER_SEGMENTS_TABLE_SQL = `
+  CREATE TABLE IF NOT EXISTS customer_segments (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    tenant_id UUID NOT NULL,
+    segment_name VARCHAR(100) NOT NULL,
+    segment_description TEXT,
+    segment_type VARCHAR(50) DEFAULT 'custom' CHECK (segment_type IN ('automatic', 'manual', 'custom')),
+    
+    -- Segmentation criteria (JSON for flexibility)
+    criteria JSONB DEFAULT '{}'::jsonb,
+    
+    -- Statistics
+    customer_count INTEGER DEFAULT 0,
+    is_active BOOLEAN DEFAULT true,
+    
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    created_by UUID,
+    
+    -- Multi-tenant constraints
+    CONSTRAINT fk_customer_segments_tenant FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
+    
+    -- Unique constraints scoped by tenant
+    CONSTRAINT unique_segment_name_per_tenant UNIQUE (tenant_id, segment_name),
+    
+    -- Data integrity constraints
+    CONSTRAINT check_customer_count_non_negative CHECK (customer_count >= 0)
+  );
+`;
+
+export const CUSTOMER_SEGMENT_MEMBERS_TABLE_SQL = `
+  CREATE TABLE IF NOT EXISTS customer_segment_members (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    tenant_id UUID NOT NULL,
+    customer_id UUID NOT NULL,
+    segment_id UUID NOT NULL,
+    added_date DATE DEFAULT CURRENT_DATE,
+    is_active BOOLEAN DEFAULT true,
+    
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    
+    -- Multi-tenant constraints
+    CONSTRAINT fk_segment_members_tenant FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
+    CONSTRAINT fk_segment_members_customer FOREIGN KEY (customer_id) REFERENCES customers(id) ON DELETE CASCADE,
+    CONSTRAINT fk_segment_members_segment FOREIGN KEY (segment_id) REFERENCES customer_segments(id) ON DELETE CASCADE,
+    
+    -- Unique constraints - prevent duplicate memberships
+    CONSTRAINT unique_customer_segment_membership UNIQUE (tenant_id, customer_id, segment_id)
+  );
+`;
+
+export const PURCHASE_HISTORY_TABLE_SQL = `
+  CREATE TABLE IF NOT EXISTS purchase_history (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    tenant_id UUID NOT NULL,
+    customer_id UUID NOT NULL,
+    transaction_id VARCHAR(100) NOT NULL,
+    invoice_number VARCHAR(100),
+    
+    -- Purchase details
+    purchase_date TIMESTAMP WITH TIME ZONE NOT NULL,
+    total_amount DECIMAL(15,2) NOT NULL,
+    tax_amount DECIMAL(15,2) DEFAULT 0,
+    discount_amount DECIMAL(15,2) DEFAULT 0,
+    net_amount DECIMAL(15,2) NOT NULL,
+    
+    -- Payment information
+    payment_method VARCHAR(50),
+    payment_status VARCHAR(20) DEFAULT 'completed' CHECK (payment_status IN ('pending', 'completed', 'failed', 'refunded', 'partial')),
+    
+    -- Items purchased (JSON array for flexibility)
+    items JSONB DEFAULT '[]'::jsonb,
+    
+    -- Location and staff
+    location_id UUID,
+    served_by_employee_id UUID,
+    
+    -- Additional information
+    notes TEXT,
+    metadata JSONB DEFAULT '{}'::jsonb,
+    
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    
+    -- Multi-tenant constraints
+    CONSTRAINT fk_purchase_history_tenant FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
+    CONSTRAINT fk_purchase_history_customer FOREIGN KEY (customer_id) REFERENCES customers(id) ON DELETE CASCADE,
+    CONSTRAINT fk_purchase_history_location FOREIGN KEY (location_id) REFERENCES locations(id) ON DELETE SET NULL,
+    
+    -- Unique constraints scoped by tenant
+    CONSTRAINT unique_transaction_per_tenant UNIQUE (tenant_id, transaction_id),
+    
+    -- Data integrity constraints
+    CONSTRAINT check_amounts_non_negative CHECK (
+      total_amount >= 0 AND tax_amount >= 0 AND discount_amount >= 0 AND net_amount >= 0
+    ),
+    CONSTRAINT check_net_amount_calculation CHECK (
+      net_amount = total_amount + tax_amount - discount_amount
+    )
+  );
+`;
+
+export const COMMUNICATION_LOGS_TABLE_SQL = `
+  CREATE TABLE IF NOT EXISTS communication_logs (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    tenant_id UUID NOT NULL,
+    customer_id UUID NOT NULL,
+    
+    -- Communication details
+    communication_type VARCHAR(20) NOT NULL CHECK (communication_type IN ('email', 'sms', 'phone', 'in_person', 'mail')),
+    direction VARCHAR(10) NOT NULL CHECK (direction IN ('inbound', 'outbound')),
+    subject VARCHAR(255),
+    message_content TEXT,
+    
+    -- Contact information
+    recipient_email VARCHAR(255),
+    recipient_phone VARCHAR(20),
+    sender_email VARCHAR(255),
+    sender_phone VARCHAR(20),
+    
+    -- Status and tracking
+    communication_status VARCHAR(20) DEFAULT 'sent' CHECK (communication_status IN ('draft', 'sent', 'delivered', 'failed', 'bounced', 'opened', 'clicked')),
+    external_message_id VARCHAR(255),
+    delivery_attempts INTEGER DEFAULT 0,
+    
+    -- Timestamps
+    sent_at TIMESTAMP WITH TIME ZONE,
+    delivered_at TIMESTAMP WITH TIME ZONE,
+    opened_at TIMESTAMP WITH TIME ZONE,
+    clicked_at TIMESTAMP WITH TIME ZONE,
+    
+    -- Campaign and automation
+    campaign_id VARCHAR(100),
+    automation_id VARCHAR(100),
+    is_automated BOOLEAN DEFAULT false,
+    
+    -- Additional information
+    metadata JSONB DEFAULT '{}'::jsonb,
+    
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    created_by UUID,
+    
+    -- Multi-tenant constraints
+    CONSTRAINT fk_communication_logs_tenant FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
+    CONSTRAINT fk_communication_logs_customer FOREIGN KEY (customer_id) REFERENCES customers(id) ON DELETE CASCADE,
+    
+    -- Data integrity constraints
+    CONSTRAINT check_delivery_attempts_non_negative CHECK (delivery_attempts >= 0),
+    CONSTRAINT check_timestamp_order CHECK (
+      sent_at IS NULL OR delivered_at IS NULL OR sent_at <= delivered_at
+    )
+  );
+`;
+
+// Staff Management & Role-Based Access Control Tables
+
+export const USERS_TABLE_SQL = `
+  CREATE TABLE IF NOT EXISTS users (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    email VARCHAR(255) NOT NULL UNIQUE,
+    username VARCHAR(100) UNIQUE,
+    password_hash VARCHAR(255),
+    
+    -- Personal information
+    first_name VARCHAR(100) NOT NULL,
+    last_name VARCHAR(100) NOT NULL,
+    phone VARCHAR(20),
+    
+    -- Account status
+    is_active BOOLEAN DEFAULT true,
+    is_verified BOOLEAN DEFAULT false,
+    last_login_at TIMESTAMP WITH TIME ZONE,
+    login_count INTEGER DEFAULT 0,
+    
+    -- Security
+    failed_login_attempts INTEGER DEFAULT 0,
+    locked_until TIMESTAMP WITH TIME ZONE,
+    password_reset_token VARCHAR(255),
+    password_reset_expires_at TIMESTAMP WITH TIME ZONE,
+    verification_token VARCHAR(255),
+    verification_expires_at TIMESTAMP WITH TIME ZONE,
+    
+    -- Additional information
+    profile_picture_url VARCHAR(500),
+    timezone VARCHAR(50) DEFAULT 'UTC',
+    language VARCHAR(10) DEFAULT 'en',
+    metadata JSONB DEFAULT '{}'::jsonb,
+    
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    
+    -- Data integrity constraints
+    CONSTRAINT check_login_count_non_negative CHECK (login_count >= 0),
+    CONSTRAINT check_failed_attempts_non_negative CHECK (failed_login_attempts >= 0)
+  );
+`;
+
+export const ROLES_TABLE_SQL = `
+  CREATE TABLE IF NOT EXISTS roles (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    tenant_id UUID NOT NULL,
+    role_name VARCHAR(100) NOT NULL,
+    role_description TEXT,
+    role_level INTEGER NOT NULL DEFAULT 1,
+    is_system_role BOOLEAN DEFAULT false,
+    is_active BOOLEAN DEFAULT true,
+    
+    -- Role capabilities
+    permissions JSONB DEFAULT '[]'::jsonb,
+    
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    created_by UUID,
+    
+    -- Multi-tenant constraints
+    CONSTRAINT fk_roles_tenant FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
+    
+    -- Unique constraints scoped by tenant
+    CONSTRAINT unique_role_name_per_tenant UNIQUE (tenant_id, role_name),
+    
+    -- Data integrity constraints
+    CONSTRAINT check_role_level_positive CHECK (role_level > 0)
+  );
+`;
+
+export const USER_TENANTS_TABLE_SQL = `
+  CREATE TABLE IF NOT EXISTS user_tenants (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id UUID NOT NULL,
+    tenant_id UUID NOT NULL,
+    role_id UUID NOT NULL,
+    
+    -- Membership details
+    status VARCHAR(20) DEFAULT 'active' CHECK (status IN ('active', 'inactive', 'suspended', 'pending')),
+    joined_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    last_access_at TIMESTAMP WITH TIME ZONE,
+    access_count INTEGER DEFAULT 0,
+    
+    -- Permissions and restrictions
+    custom_permissions JSONB DEFAULT '[]'::jsonb,
+    restrictions JSONB DEFAULT '{}'::jsonb,
+    
+    -- Additional information
+    invitation_token VARCHAR(255),
+    invitation_expires_at TIMESTAMP WITH TIME ZONE,
+    invited_by UUID,
+    notes TEXT,
+    
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    
+    -- Multi-tenant constraints
+    CONSTRAINT fk_user_tenants_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+    CONSTRAINT fk_user_tenants_tenant FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
+    CONSTRAINT fk_user_tenants_role FOREIGN KEY (role_id) REFERENCES roles(id) ON DELETE RESTRICT,
+    
+    -- Unique constraints - one active membership per user per tenant
+    CONSTRAINT unique_user_tenant_membership UNIQUE (user_id, tenant_id),
+    
+    -- Data integrity constraints
+    CONSTRAINT check_access_count_non_negative CHECK (access_count >= 0)
+  );
+`;
+
+export const SALES_COMMISSIONS_TABLE_SQL = `
+  CREATE TABLE IF NOT EXISTS sales_commissions (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    tenant_id UUID NOT NULL,
+    employee_id UUID NOT NULL,
+    transaction_id VARCHAR(255) NOT NULL,
+    
+    -- Sale details
+    sale_date TIMESTAMP WITH TIME ZONE NOT NULL,
+    gross_sale_amount DECIMAL(15,2) NOT NULL,
+    net_sale_amount DECIMAL(15,2) NOT NULL,
+    
+    -- Commission calculation
+    commission_rate DECIMAL(5,4) NOT NULL,
+    commission_amount DECIMAL(15,2) NOT NULL,
+    commission_type VARCHAR(50) DEFAULT 'sales' CHECK (commission_type IN ('sales', 'bonus', 'override', 'team', 'target')),
+    
+    -- Commission status
+    status VARCHAR(20) DEFAULT 'pending' CHECK (status IN ('pending', 'approved', 'paid', 'cancelled')),
+    calculated_date TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    approved_date TIMESTAMP WITH TIME ZONE,
+    paid_date TIMESTAMP WITH TIME ZONE,
+    
+    -- Payment information
+    payment_method VARCHAR(50),
+    payment_reference VARCHAR(100),
+    
+    -- Additional information
+    notes TEXT,
+    metadata JSONB DEFAULT '{}'::jsonb,
+    
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    
+    -- Multi-tenant constraints
+    CONSTRAINT fk_sales_commissions_tenant FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
+    
+    -- Unique constraints - prevent duplicate commission calculations
+    CONSTRAINT unique_commission_per_transaction UNIQUE (tenant_id, employee_id, transaction_id),
+    
+    -- Data integrity constraints
+    CONSTRAINT check_amounts_positive CHECK (
+      gross_sale_amount >= 0 AND net_sale_amount >= 0 AND commission_amount >= 0
+    ),
+    CONSTRAINT check_commission_rate_valid CHECK (commission_rate >= 0 AND commission_rate <= 1),
+    CONSTRAINT check_date_sequence CHECK (
+      approved_date IS NULL OR approved_date >= calculated_date
+    )
+  );
+`;
+
+// Human Resource Management (HRM) Tables
+
+export const EMPLOYEES_TABLE_SQL = `
+  CREATE TABLE IF NOT EXISTS employees (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    tenant_id UUID NOT NULL,
+    user_id UUID,
+    employee_code VARCHAR(50) NOT NULL,
+    
+    -- Personal information
+    first_name VARCHAR(100) NOT NULL,
+    last_name VARCHAR(100) NOT NULL,
+    middle_name VARCHAR(100),
+    email VARCHAR(255) NOT NULL,
+    phone VARCHAR(20),
+    mobile VARCHAR(20),
+    date_of_birth DATE,
+    gender VARCHAR(20) CHECK (gender IN ('male', 'female', 'other', 'prefer_not_to_say')),
+    marital_status VARCHAR(20) CHECK (marital_status IN ('single', 'married', 'divorced', 'widowed', 'other')),
+    
+    -- Address information
+    address TEXT,
+    city VARCHAR(100),
+    state VARCHAR(100),
+    postal_code VARCHAR(20),
+    country VARCHAR(100),
+    
+    -- Emergency contact
+    emergency_contact_name VARCHAR(200),
+    emergency_contact_phone VARCHAR(20),
+    emergency_contact_relationship VARCHAR(50),
+    
+    -- Employment information
+    employee_type VARCHAR(50) DEFAULT 'full_time' CHECK (employee_type IN ('full_time', 'part_time', 'contract', 'intern', 'consultant')),
+    department VARCHAR(100),
+    position_title VARCHAR(100),
+    hire_date DATE NOT NULL,
+    termination_date DATE,
+    employment_status VARCHAR(20) DEFAULT 'active' CHECK (employment_status IN ('active', 'inactive', 'terminated', 'suspended', 'on_leave')),
+    
+    -- Compensation
+    base_salary DECIMAL(15,2),
+    hourly_rate DECIMAL(10,2),
+    commission_rate DECIMAL(5,4),
+    overtime_rate DECIMAL(10,2),
+    
+    -- Work schedule
+    work_schedule VARCHAR(50) DEFAULT 'standard',
+    work_hours_per_week DECIMAL(5,2) DEFAULT 40.00,
+    
+    -- Additional information
+    skills TEXT[],
+    certifications JSONB DEFAULT '[]'::jsonb,
+    notes TEXT,
+    profile_picture_url VARCHAR(500),
+    metadata JSONB DEFAULT '{}'::jsonb,
+    
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    created_by UUID,
+    
+    -- Multi-tenant constraints
+    CONSTRAINT fk_employees_tenant FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
+    CONSTRAINT fk_employees_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL,
+    
+    -- Unique constraints scoped by tenant
+    CONSTRAINT unique_employee_code_per_tenant UNIQUE (tenant_id, employee_code),
+    CONSTRAINT unique_employee_email_per_tenant UNIQUE (tenant_id, email),
+    
+    -- Data integrity constraints
+    CONSTRAINT check_hire_before_termination CHECK (
+      termination_date IS NULL OR hire_date <= termination_date
+    ),
+    CONSTRAINT check_rates_non_negative CHECK (
+      base_salary IS NULL OR base_salary >= 0 AND
+      hourly_rate IS NULL OR hourly_rate >= 0 AND
+      overtime_rate IS NULL OR overtime_rate >= 0 AND
+      commission_rate IS NULL OR (commission_rate >= 0 AND commission_rate <= 1)
+    ),
+    CONSTRAINT check_work_hours_positive CHECK (work_hours_per_week > 0)
+  );
+`;
+
+export const ATTENDANCE_RECORDS_TABLE_SQL = `
+  CREATE TABLE IF NOT EXISTS attendance_records (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    tenant_id UUID NOT NULL,
+    employee_id UUID NOT NULL,
+    
+    -- Date and shift information
+    attendance_date DATE NOT NULL,
+    shift_type VARCHAR(50) DEFAULT 'regular',
+    scheduled_start_time TIME,
+    scheduled_end_time TIME,
+    
+    -- Actual time tracking
+    actual_start_time TIMESTAMP WITH TIME ZONE,
+    actual_end_time TIMESTAMP WITH TIME ZONE,
+    break_start_time TIMESTAMP WITH TIME ZONE,
+    break_end_time TIMESTAMP WITH TIME ZONE,
+    
+    -- Calculated hours
+    scheduled_hours DECIMAL(5,2),
+    actual_hours DECIMAL(5,2),
+    overtime_hours DECIMAL(5,2) DEFAULT 0,
+    break_hours DECIMAL(5,2) DEFAULT 0,
+    
+    -- Attendance status
+    status VARCHAR(20) DEFAULT 'present' CHECK (status IN ('present', 'absent', 'late', 'half_day', 'sick', 'vacation', 'holiday', 'unpaid_leave')),
+    is_overtime BOOLEAN DEFAULT false,
+    
+    -- Location tracking
+    clock_in_location VARCHAR(200),
+    clock_out_location VARCHAR(200),
+    
+    -- Additional information
+    notes TEXT,
+    approved_by UUID,
+    approved_at TIMESTAMP WITH TIME ZONE,
+    
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    
+    -- Multi-tenant constraints
+    CONSTRAINT fk_attendance_records_tenant FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
+    CONSTRAINT fk_attendance_records_employee FOREIGN KEY (employee_id) REFERENCES employees(id) ON DELETE CASCADE,
+    
+    -- Unique constraints - one record per employee per date
+    CONSTRAINT unique_attendance_per_employee_date UNIQUE (tenant_id, employee_id, attendance_date),
+    
+    -- Data integrity constraints
+    CONSTRAINT check_hours_non_negative CHECK (
+      scheduled_hours IS NULL OR scheduled_hours >= 0 AND
+      actual_hours IS NULL OR actual_hours >= 0 AND
+      overtime_hours >= 0 AND break_hours >= 0
+    ),
+    CONSTRAINT check_time_sequence CHECK (
+      actual_start_time IS NULL OR actual_end_time IS NULL OR actual_start_time <= actual_end_time
+    )
+  );
+`;
+
+export const TIME_CLOCK_ENTRIES_TABLE_SQL = `
+  CREATE TABLE IF NOT EXISTS time_clock_entries (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    tenant_id UUID NOT NULL,
+    employee_id UUID NOT NULL,
+    
+    -- Clock entry details
+    entry_type VARCHAR(20) NOT NULL CHECK (entry_type IN ('clock_in', 'clock_out', 'break_start', 'break_end')),
+    entry_timestamp TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    
+    -- Location and device information
+    location VARCHAR(200),
+    ip_address INET,
+    device_info JSONB DEFAULT '{}'::jsonb,
+    gps_coordinates POINT,
+    
+    -- Verification and approval
+    is_manual_entry BOOLEAN DEFAULT false,
+    manual_entry_reason TEXT,
+    verified_by UUID,
+    verified_at TIMESTAMP WITH TIME ZONE,
+    
+    -- Photo verification (if enabled)
+    photo_url VARCHAR(500),
+    
+    -- Additional information
+    notes TEXT,
+    metadata JSONB DEFAULT '{}'::jsonb,
+    
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    
+    -- Multi-tenant constraints
+    CONSTRAINT fk_time_clock_entries_tenant FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
+    CONSTRAINT fk_time_clock_entries_employee FOREIGN KEY (employee_id) REFERENCES employees(id) ON DELETE CASCADE
+  );
+`;
+
+// People Management Indexes for Performance Optimization
+
+export const CUSTOMERS_INDEXES_SQL = `
+  CREATE INDEX IF NOT EXISTS idx_customers_tenant_id ON customers(tenant_id);
+  CREATE INDEX IF NOT EXISTS idx_customers_email ON customers(tenant_id, email);
+  CREATE INDEX IF NOT EXISTS idx_customers_status ON customers(tenant_id, customer_status);
+  CREATE INDEX IF NOT EXISTS idx_customers_type ON customers(tenant_id, customer_type);
+  CREATE INDEX IF NOT EXISTS idx_customers_name ON customers(tenant_id, first_name, last_name);
+  CREATE INDEX IF NOT EXISTS idx_customers_purchase_date ON customers(last_purchase_date);
+  CREATE INDEX IF NOT EXISTS idx_customers_total_purchases ON customers(tenant_id, total_purchases);
+  CREATE INDEX IF NOT EXISTS idx_customers_loyalty_points ON customers(tenant_id, loyalty_points);
+  CREATE INDEX IF NOT EXISTS idx_customers_tags_gin ON customers USING GIN (tags);
+  CREATE INDEX IF NOT EXISTS idx_customers_search ON customers USING GIN (to_tsvector('english', first_name || ' ' || last_name || ' ' || COALESCE(company_name, '')));
+`;
+
+export const CUSTOMER_SEGMENTS_INDEXES_SQL = `
+  CREATE INDEX IF NOT EXISTS idx_customer_segments_tenant_id ON customer_segments(tenant_id);
+  CREATE INDEX IF NOT EXISTS idx_customer_segments_active ON customer_segments(tenant_id, is_active);
+  CREATE INDEX IF NOT EXISTS idx_customer_segments_type ON customer_segments(tenant_id, segment_type);
+`;
+
+export const CUSTOMER_SEGMENT_MEMBERS_INDEXES_SQL = `
+  CREATE INDEX IF NOT EXISTS idx_segment_members_tenant_id ON customer_segment_members(tenant_id);
+  CREATE INDEX IF NOT EXISTS idx_segment_members_customer ON customer_segment_members(customer_id);
+  CREATE INDEX IF NOT EXISTS idx_segment_members_segment ON customer_segment_members(segment_id);
+  CREATE INDEX IF NOT EXISTS idx_segment_members_active ON customer_segment_members(tenant_id, is_active);
+`;
+
+export const PURCHASE_HISTORY_INDEXES_SQL = `
+  CREATE INDEX IF NOT EXISTS idx_purchase_history_tenant_id ON purchase_history(tenant_id);
+  CREATE INDEX IF NOT EXISTS idx_purchase_history_customer ON purchase_history(customer_id);
+  CREATE INDEX IF NOT EXISTS idx_purchase_history_date ON purchase_history(purchase_date);
+  CREATE INDEX IF NOT EXISTS idx_purchase_history_amount ON purchase_history(tenant_id, total_amount);
+  CREATE INDEX IF NOT EXISTS idx_purchase_history_status ON purchase_history(tenant_id, payment_status);
+  CREATE INDEX IF NOT EXISTS idx_purchase_history_transaction ON purchase_history(transaction_id);
+  CREATE INDEX IF NOT EXISTS idx_purchase_history_employee ON purchase_history(served_by_employee_id);
+  CREATE INDEX IF NOT EXISTS idx_purchase_history_location ON purchase_history(location_id);
+`;
+
+export const COMMUNICATION_LOGS_INDEXES_SQL = `
+  CREATE INDEX IF NOT EXISTS idx_communication_logs_tenant_id ON communication_logs(tenant_id);
+  CREATE INDEX IF NOT EXISTS idx_communication_logs_customer ON communication_logs(customer_id);
+  CREATE INDEX IF NOT EXISTS idx_communication_logs_type ON communication_logs(tenant_id, communication_type);
+  CREATE INDEX IF NOT EXISTS idx_communication_logs_status ON communication_logs(tenant_id, communication_status);
+  CREATE INDEX IF NOT EXISTS idx_communication_logs_direction ON communication_logs(tenant_id, direction);
+  CREATE INDEX IF NOT EXISTS idx_communication_logs_sent_at ON communication_logs(sent_at);
+  CREATE INDEX IF NOT EXISTS idx_communication_logs_campaign ON communication_logs(campaign_id);
+  CREATE INDEX IF NOT EXISTS idx_communication_logs_automated ON communication_logs(tenant_id, is_automated);
+`;
+
+export const USERS_INDEXES_SQL = `
+  CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);
+  CREATE INDEX IF NOT EXISTS idx_users_username ON users(username);
+  CREATE INDEX IF NOT EXISTS idx_users_active ON users(is_active);
+  CREATE INDEX IF NOT EXISTS idx_users_verified ON users(is_verified);
+  CREATE INDEX IF NOT EXISTS idx_users_last_login ON users(last_login_at);
+  CREATE INDEX IF NOT EXISTS idx_users_search ON users USING GIN (to_tsvector('english', first_name || ' ' || last_name));
+`;
+
+export const ROLES_INDEXES_SQL = `
+  CREATE INDEX IF NOT EXISTS idx_roles_tenant_id ON roles(tenant_id);
+  CREATE INDEX IF NOT EXISTS idx_roles_active ON roles(tenant_id, is_active);
+  CREATE INDEX IF NOT EXISTS idx_roles_system ON roles(is_system_role);
+  CREATE INDEX IF NOT EXISTS idx_roles_level ON roles(tenant_id, role_level);
+`;
+
+export const USER_TENANTS_INDEXES_SQL = `
+  CREATE INDEX IF NOT EXISTS idx_user_tenants_user ON user_tenants(user_id);
+  CREATE INDEX IF NOT EXISTS idx_user_tenants_tenant ON user_tenants(tenant_id);
+  CREATE INDEX IF NOT EXISTS idx_user_tenants_role ON user_tenants(role_id);
+  CREATE INDEX IF NOT EXISTS idx_user_tenants_status ON user_tenants(tenant_id, status);
+  CREATE INDEX IF NOT EXISTS idx_user_tenants_last_access ON user_tenants(last_access_at);
+`;
+
+export const SALES_COMMISSIONS_INDEXES_SQL = `
+  CREATE INDEX IF NOT EXISTS idx_sales_commissions_tenant_id ON sales_commissions(tenant_id);
+  CREATE INDEX IF NOT EXISTS idx_sales_commissions_employee ON sales_commissions(employee_id);
+  CREATE INDEX IF NOT EXISTS idx_sales_commissions_transaction ON sales_commissions(transaction_id);
+  CREATE INDEX IF NOT EXISTS idx_sales_commissions_status ON sales_commissions(tenant_id, status);
+  CREATE INDEX IF NOT EXISTS idx_sales_commissions_sale_date ON sales_commissions(sale_date);
+  CREATE INDEX IF NOT EXISTS idx_sales_commissions_type ON sales_commissions(tenant_id, commission_type);
+  CREATE INDEX IF NOT EXISTS idx_sales_commissions_calculated_date ON sales_commissions(calculated_date);
+`;
+
+export const EMPLOYEES_INDEXES_SQL = `
+  CREATE INDEX IF NOT EXISTS idx_employees_tenant_id ON employees(tenant_id);
+  CREATE INDEX IF NOT EXISTS idx_employees_user ON employees(user_id);
+  CREATE INDEX IF NOT EXISTS idx_employees_email ON employees(tenant_id, email);
+  CREATE INDEX IF NOT EXISTS idx_employees_status ON employees(tenant_id, employment_status);
+  CREATE INDEX IF NOT EXISTS idx_employees_department ON employees(tenant_id, department);
+  CREATE INDEX IF NOT EXISTS idx_employees_type ON employees(tenant_id, employee_type);
+  CREATE INDEX IF NOT EXISTS idx_employees_hire_date ON employees(hire_date);
+  CREATE INDEX IF NOT EXISTS idx_employees_search ON employees USING GIN (to_tsvector('english', first_name || ' ' || last_name || ' ' || COALESCE(position_title, '')));
+`;
+
+export const ATTENDANCE_RECORDS_INDEXES_SQL = `
+  CREATE INDEX IF NOT EXISTS idx_attendance_records_tenant_id ON attendance_records(tenant_id);
+  CREATE INDEX IF NOT EXISTS idx_attendance_records_employee ON attendance_records(employee_id);
+  CREATE INDEX IF NOT EXISTS idx_attendance_records_date ON attendance_records(attendance_date);
+  CREATE INDEX IF NOT EXISTS idx_attendance_records_status ON attendance_records(tenant_id, status);
+  CREATE INDEX IF NOT EXISTS idx_attendance_records_overtime ON attendance_records(tenant_id, is_overtime);
+  CREATE INDEX IF NOT EXISTS idx_attendance_records_employee_date ON attendance_records(employee_id, attendance_date);
+`;
+
+export const TIME_CLOCK_ENTRIES_INDEXES_SQL = `
+  CREATE INDEX IF NOT EXISTS idx_time_clock_entries_tenant_id ON time_clock_entries(tenant_id);
+  CREATE INDEX IF NOT EXISTS idx_time_clock_entries_employee ON time_clock_entries(employee_id);
+  CREATE INDEX IF NOT EXISTS idx_time_clock_entries_type ON time_clock_entries(tenant_id, entry_type);
+  CREATE INDEX IF NOT EXISTS idx_time_clock_entries_timestamp ON time_clock_entries(entry_timestamp);
+  CREATE INDEX IF NOT EXISTS idx_time_clock_entries_manual ON time_clock_entries(tenant_id, is_manual_entry);
+  CREATE INDEX IF NOT EXISTS idx_time_clock_entries_employee_date ON time_clock_entries(employee_id, DATE(entry_timestamp));
+`;
+
+// People Management Triggers for Automatic Updates
+
+export const CUSTOMERS_TRIGGERS_SQL = `
+  DROP TRIGGER IF EXISTS trigger_update_customers_updated_at ON customers;
+  CREATE TRIGGER trigger_update_customers_updated_at
+    BEFORE UPDATE ON customers
+    FOR EACH ROW
+    EXECUTE FUNCTION update_updated_at_column();
+`;
+
+export const CUSTOMER_SEGMENTS_TRIGGERS_SQL = `
+  DROP TRIGGER IF EXISTS trigger_update_customer_segments_updated_at ON customer_segments;
+  CREATE TRIGGER trigger_update_customer_segments_updated_at
+    BEFORE UPDATE ON customer_segments
+    FOR EACH ROW
+    EXECUTE FUNCTION update_updated_at_column();
+`;
+
+export const PURCHASE_HISTORY_TRIGGERS_SQL = `
+  DROP TRIGGER IF EXISTS trigger_update_purchase_history_updated_at ON purchase_history;
+  CREATE TRIGGER trigger_update_purchase_history_updated_at
+    BEFORE UPDATE ON purchase_history
+    FOR EACH ROW
+    EXECUTE FUNCTION update_updated_at_column();
+`;
+
+export const COMMUNICATION_LOGS_TRIGGERS_SQL = `
+  DROP TRIGGER IF EXISTS trigger_update_communication_logs_updated_at ON communication_logs;
+  CREATE TRIGGER trigger_update_communication_logs_updated_at
+    BEFORE UPDATE ON communication_logs
+    FOR EACH ROW
+    EXECUTE FUNCTION update_updated_at_column();
+`;
+
+export const USERS_TRIGGERS_SQL = `
+  DROP TRIGGER IF EXISTS trigger_update_users_updated_at ON users;
+  CREATE TRIGGER trigger_update_users_updated_at
+    BEFORE UPDATE ON users
+    FOR EACH ROW
+    EXECUTE FUNCTION update_updated_at_column();
+`;
+
+export const ROLES_TRIGGERS_SQL = `
+  DROP TRIGGER IF EXISTS trigger_update_roles_updated_at ON roles;
+  CREATE TRIGGER trigger_update_roles_updated_at
+    BEFORE UPDATE ON roles
+    FOR EACH ROW
+    EXECUTE FUNCTION update_updated_at_column();
+`;
+
+export const USER_TENANTS_TRIGGERS_SQL = `
+  DROP TRIGGER IF EXISTS trigger_update_user_tenants_updated_at ON user_tenants;
+  CREATE TRIGGER trigger_update_user_tenants_updated_at
+    BEFORE UPDATE ON user_tenants
+    FOR EACH ROW
+    EXECUTE FUNCTION update_updated_at_column();
+`;
+
+export const SALES_COMMISSIONS_TRIGGERS_SQL = `
+  DROP TRIGGER IF EXISTS trigger_update_sales_commissions_updated_at ON sales_commissions;
+  CREATE TRIGGER trigger_update_sales_commissions_updated_at
+    BEFORE UPDATE ON sales_commissions
+    FOR EACH ROW
+    EXECUTE FUNCTION update_updated_at_column();
+`;
+
+export const EMPLOYEES_TRIGGERS_SQL = `
+  DROP TRIGGER IF EXISTS trigger_update_employees_updated_at ON employees;
+  CREATE TRIGGER trigger_update_employees_updated_at
+    BEFORE UPDATE ON employees
+    FOR EACH ROW
+    EXECUTE FUNCTION update_updated_at_column();
+`;
+
+export const ATTENDANCE_RECORDS_TRIGGERS_SQL = `
+  DROP TRIGGER IF EXISTS trigger_update_attendance_records_updated_at ON attendance_records;
+  CREATE TRIGGER trigger_update_attendance_records_updated_at
+    BEFORE UPDATE ON attendance_records
+    FOR EACH ROW
+    EXECUTE FUNCTION update_updated_at_column();
+`;
+
+// Business Logic Triggers for People Management
+
+export const UPDATE_CUSTOMER_PURCHASE_STATS_TRIGGER_SQL = `
+  CREATE OR REPLACE FUNCTION update_customer_purchase_stats()
+  RETURNS TRIGGER AS $$
+  BEGIN
+    -- Update customer purchase statistics when new purchase is added
+    UPDATE customers
+    SET 
+      total_purchases = COALESCE(total_purchases, 0) + NEW.net_amount,
+      total_orders = COALESCE(total_orders, 0) + 1,
+      last_purchase_date = NEW.purchase_date,
+      first_purchase_date = CASE 
+        WHEN first_purchase_date IS NULL OR NEW.purchase_date < first_purchase_date 
+        THEN NEW.purchase_date::DATE 
+        ELSE first_purchase_date 
+      END,
+      average_order_value = (COALESCE(total_purchases, 0) + NEW.net_amount) / (COALESCE(total_orders, 0) + 1),
+      updated_at = CURRENT_TIMESTAMP
+    WHERE id = NEW.customer_id;
+    
+    RETURN NEW;
+  END;
+  $$ language 'plpgsql';
+
+  DROP TRIGGER IF EXISTS trigger_update_customer_purchase_stats ON purchase_history;
+  CREATE TRIGGER trigger_update_customer_purchase_stats
+    AFTER INSERT ON purchase_history
+    FOR EACH ROW
+    EXECUTE FUNCTION update_customer_purchase_stats();
+`;
+
+export const CALCULATE_ATTENDANCE_HOURS_TRIGGER_SQL = `
+  CREATE OR REPLACE FUNCTION calculate_attendance_hours()
+  RETURNS TRIGGER AS $$
+  BEGIN
+    -- Calculate actual hours worked if both start and end times are present
+    IF NEW.actual_start_time IS NOT NULL AND NEW.actual_end_time IS NOT NULL THEN
+      NEW.actual_hours = EXTRACT(EPOCH FROM (NEW.actual_end_time - NEW.actual_start_time)) / 3600.0;
+      
+      -- Calculate break hours if both break times are present
+      IF NEW.break_start_time IS NOT NULL AND NEW.break_end_time IS NOT NULL THEN
+        NEW.break_hours = EXTRACT(EPOCH FROM (NEW.break_end_time - NEW.break_start_time)) / 3600.0;
+        NEW.actual_hours = NEW.actual_hours - NEW.break_hours;
+      END IF;
+      
+      -- Calculate overtime hours (assuming 8 hours is standard)
+      IF NEW.actual_hours > 8 THEN
+        NEW.overtime_hours = NEW.actual_hours - 8;
+        NEW.is_overtime = true;
+      ELSE
+        NEW.overtime_hours = 0;
+        NEW.is_overtime = false;
+      END IF;
+    END IF;
+    
+    RETURN NEW;
+  END;
+  $$ language 'plpgsql';
+
+  DROP TRIGGER IF EXISTS trigger_calculate_attendance_hours ON attendance_records;
+  CREATE TRIGGER trigger_calculate_attendance_hours
+    BEFORE INSERT OR UPDATE ON attendance_records
+    FOR EACH ROW
+    EXECUTE FUNCTION calculate_attendance_hours();
+`;
+
 // Consolidated SQL exports for inventory management
 
 export const ALL_INVENTORY_TABLES_SQL = [
@@ -1553,6 +2388,22 @@ export const ALL_INVENTORY_TABLES_SQL = [
   LOW_STOCK_ALERTS_TABLE_SQL
 ].join('\n\n');
 
+// People Management tables aggregation
+export const ALL_PEOPLE_MANAGEMENT_TABLES_SQL = [
+  CUSTOMERS_TABLE_SQL,
+  CUSTOMER_SEGMENTS_TABLE_SQL,
+  CUSTOMER_SEGMENT_MEMBERS_TABLE_SQL,
+  PURCHASE_HISTORY_TABLE_SQL,
+  COMMUNICATION_LOGS_TABLE_SQL,
+  USERS_TABLE_SQL,
+  ROLES_TABLE_SQL,
+  USER_TENANTS_TABLE_SQL,
+  SALES_COMMISSIONS_TABLE_SQL,
+  EMPLOYEES_TABLE_SQL,
+  ATTENDANCE_RECORDS_TABLE_SQL,
+  TIME_CLOCK_ENTRIES_TABLE_SQL
+].join('\n\n');
+
 export const ALL_INVENTORY_INDEXES_SQL = [
   PRODUCT_CATEGORIES_INDEXES_SQL,
   SUPPLIERS_INDEXES_SQL,
@@ -1566,6 +2417,22 @@ export const ALL_INVENTORY_INDEXES_SQL = [
   STOCK_AUDITS_INDEXES_SQL,
   PRODUCT_SERIAL_NUMBERS_INDEXES_SQL,
   LOW_STOCK_ALERTS_INDEXES_SQL
+].join('\n\n');
+
+// People Management indexes aggregation  
+export const ALL_PEOPLE_MANAGEMENT_INDEXES_SQL = [
+  CUSTOMERS_INDEXES_SQL,
+  CUSTOMER_SEGMENTS_INDEXES_SQL,
+  CUSTOMER_SEGMENT_MEMBERS_INDEXES_SQL,
+  PURCHASE_HISTORY_INDEXES_SQL,
+  COMMUNICATION_LOGS_INDEXES_SQL,
+  USERS_INDEXES_SQL,
+  ROLES_INDEXES_SQL,
+  USER_TENANTS_INDEXES_SQL,
+  SALES_COMMISSIONS_INDEXES_SQL,
+  EMPLOYEES_INDEXES_SQL,
+  ATTENDANCE_RECORDS_INDEXES_SQL,
+  TIME_CLOCK_ENTRIES_INDEXES_SQL
 ].join('\n\n');
 
 export const ALL_INVENTORY_TRIGGERS_SQL = [
@@ -1587,6 +2454,39 @@ export const ALL_INVENTORY_TRIGGERS_SQL = [
   PO_STATUS_VALIDATION_TRIGGER_SQL,
   LOW_STOCK_ALERT_TRIGGER_SQL,
   PO_RECEIPT_STOCK_TRIGGER_SQL
+].join('\n\n');
+
+// People Management triggers aggregation
+export const ALL_PEOPLE_MANAGEMENT_TRIGGERS_SQL = [
+  CUSTOMERS_TRIGGERS_SQL,
+  CUSTOMER_SEGMENTS_TRIGGERS_SQL,
+  PURCHASE_HISTORY_TRIGGERS_SQL,
+  COMMUNICATION_LOGS_TRIGGERS_SQL,
+  USERS_TRIGGERS_SQL,
+  ROLES_TRIGGERS_SQL,
+  USER_TENANTS_TRIGGERS_SQL,
+  SALES_COMMISSIONS_TRIGGERS_SQL,
+  EMPLOYEES_TRIGGERS_SQL,
+  ATTENDANCE_RECORDS_TRIGGERS_SQL,
+  // Business Logic Triggers for People Management
+  UPDATE_CUSTOMER_PURCHASE_STATS_TRIGGER_SQL,
+  CALCULATE_ATTENDANCE_HOURS_TRIGGER_SQL
+].join('\n\n');
+
+// Complete system aggregation (Inventory + People Management)
+export const ALL_SYSTEM_TABLES_SQL = [
+  ALL_INVENTORY_TABLES_SQL,
+  ALL_PEOPLE_MANAGEMENT_TABLES_SQL
+].join('\n\n');
+
+export const ALL_SYSTEM_INDEXES_SQL = [
+  ALL_INVENTORY_INDEXES_SQL,
+  ALL_PEOPLE_MANAGEMENT_INDEXES_SQL
+].join('\n\n');
+
+export const ALL_SYSTEM_TRIGGERS_SQL = [
+  ALL_INVENTORY_TRIGGERS_SQL,
+  ALL_PEOPLE_MANAGEMENT_TRIGGERS_SQL
 ].join('\n\n');
 
 // Comprehensive verification function for inventory business logic
