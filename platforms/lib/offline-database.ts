@@ -361,7 +361,7 @@ const productVariantSchema: RxJsonSchema<ProductVariantDocument> = {
     }
   },
   required: ['id', 'tenantId', 'productId', 'variantCode', 'variantName', 'variantType', 'variantValue', 'createdAt', 'updatedAt'],
-  indexes: ['tenantId', 'productId', 'variantCode', 'variantType', 'sku', 'barcode', 'isActive']
+  indexes: ['tenantId', 'productId', 'variantCode', 'variantType', 'sku', 'barcode', 'isActive', ['tenantId', 'sku'], ['tenantId', 'barcode']]
 }
 
 // ===================================================================
@@ -937,7 +937,7 @@ const lowStockAlertSchema: RxJsonSchema<LowStockAlertDocument> = {
   indexes: ['tenantId', 'productId', 'variantId', 'locationId', 'isActive', 'currentStock']
 }\n\n// Product schema aligned with normalized inventory model
 const productSchema: RxJsonSchema<ProductDocument> = {
-  version: 0,
+  version: 1,
   primaryKey: 'id',
   type: 'object',
   properties: {
@@ -971,7 +971,13 @@ const productSchema: RxJsonSchema<ProductDocument> = {
     image: {
       type: 'string'
     },
+    sku: {
+      type: 'string'
+    },
     barcode: {
+      type: 'string'
+    },
+    brand: {
       type: 'string'
     },
     updatedAt: {
@@ -984,7 +990,16 @@ const productSchema: RxJsonSchema<ProductDocument> = {
     }
   },
   required: ['id', 'tenantId', 'name', 'price', 'stock', 'updatedAt'],
-  indexes: ['tenantId', 'categoryId', 'supplierId', 'barcode']
+  indexes: ['tenantId', 'categoryId', 'supplierId', ['tenantId', 'sku'], ['tenantId', 'barcode'], 'barcode'],
+  migrationStrategies: {
+    // Migration from version 0 to 1: Copy barcode to sku field
+    1: function(oldDoc: any) {
+      if (!oldDoc.sku && oldDoc.barcode) {
+        oldDoc.sku = oldDoc.barcode;
+      }
+      return oldDoc;
+    }
+  }
 }
 
 // Transaction schema for offline sales
@@ -1464,8 +1479,10 @@ export interface ProductDocument {
   price: number
   categoryId?: string
   supplierId?: string
+  brand?: string
   stock: number
   image?: string
+  sku?: string
   barcode?: string
   updatedAt: string
   _deleted: boolean
