@@ -60,7 +60,7 @@ export async function getEnhancedSubdomainData(subdomain: string): Promise<Enhan
       features: data.features || [],
     };
   } catch (error) {
-    console.error('Error fetching enhanced subdomain data:', error);
+    console.error('Redis connection error in getEnhancedSubdomainData:', error);
     return null;
   }
 }
@@ -91,7 +91,7 @@ export async function getAllEnhancedSubdomains(): Promise<EnhancedTenant[]> {
       };
     });
   } catch (error) {
-    console.error('Error fetching all enhanced subdomains:', error);
+    console.error('Redis connection error in getAllEnhancedSubdomains:', error);
     return [];
   }
 }
@@ -112,7 +112,7 @@ export async function updateTenantStatus(subdomain: string, status: TenantStatus
     await redis.set(`subdomain:${sanitizedSubdomain}`, updated);
     return true;
   } catch (error) {
-    console.error('Error updating tenant status:', error);
+    console.error('Redis connection error in updateTenantStatus:', error);
     return false;
   }
 }
@@ -133,7 +133,7 @@ export async function updateTenantPlan(subdomain: string, plan: SubscriptionPlan
     await redis.set(`subdomain:${sanitizedSubdomain}`, updated);
     return true;
   } catch (error) {
-    console.error('Error updating tenant plan:', error);
+    console.error('Redis connection error in updateTenantPlan:', error);
     return false;
   }
 }
