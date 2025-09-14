@@ -644,6 +644,52 @@ async function getCurrentTenantId(): Promise<string | null> {
 }
 
 /**
+ * Get partner record by user ID
+ */
+export async function getPartnerByUserId(userId: string): Promise<string | null> {
+  try {
+    const tenantId = await getCurrentTenantId();
+    if (!tenantId) {
+      throw new Error('Unable to determine tenant context');
+    }
+
+    const result = await execute_sql(`
+      SELECT id FROM partners 
+      WHERE tenant_id = $1 AND user_id = $2 AND status = 'active'
+      LIMIT 1;
+    `, [tenantId, userId]);
+
+    return result.rows.length > 0 ? result.rows[0].id : null;
+  } catch (error) {
+    console.error('Error fetching partner by user ID:', error);
+    return null;
+  }
+}
+
+/**
+ * Get partner record by email (fallback method)
+ */
+export async function getPartnerByEmail(email: string): Promise<string | null> {
+  try {
+    const tenantId = await getCurrentTenantId();
+    if (!tenantId) {
+      throw new Error('Unable to determine tenant context');
+    }
+
+    const result = await execute_sql(`
+      SELECT id FROM partners 
+      WHERE tenant_id = $1 AND email = $2 AND status = 'active'
+      LIMIT 1;
+    `, [tenantId, email]);
+
+    return result.rows.length > 0 ? result.rows[0].id : null;
+  } catch (error) {
+    console.error('Error fetching partner by email:', error);
+    return null;
+  }
+}
+
+/**
  * Create a new partner application
  */
 export async function createPartnerApplication(applicationData: CreatePartnerApplicationData): Promise<string | null> {
