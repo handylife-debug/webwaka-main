@@ -118,7 +118,7 @@ export const GET = withStaffPermissions('staff.view')(async function(request: Ne
       error: error instanceof Error ? error.message : 'Unknown error'
     }, { status: 500 });
   }
-}
+});
 
 // PUT - Update user information or tenant relationship
 export const PUT = withStaffPermissions('staff.edit')(async function(request: NextRequest, { params }: { params: { id: string } }) {
@@ -308,7 +308,7 @@ export const PUT = withStaffPermissions('staff.edit')(async function(request: Ne
       error: error instanceof Error ? error.message : 'Unknown error'
     }, { status: 500 });
   }
-}
+});
 
 // DELETE - Remove user from tenant (soft delete of relationship)
 export const DELETE = withStaffPermissions('staff.delete')(async function(request: NextRequest, { params }: { params: { id: string } }) {

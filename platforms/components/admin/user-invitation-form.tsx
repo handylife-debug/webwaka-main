@@ -21,7 +21,7 @@ import {
   DialogTrigger,
 } from '@/components/ui/dialog';
 import { UserPlus, Loader2 } from 'lucide-react';
-import { AdminRole, roleDescriptions } from '@/lib/user-management';
+import { AdminRole, roleDescriptions } from '@/lib/types';
 
 interface UserInvitationFormProps {
   onInvite: (email: string, role: AdminRole) => Promise<{ success: boolean; error?: string }>;

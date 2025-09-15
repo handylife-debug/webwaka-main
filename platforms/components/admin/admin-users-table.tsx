@@ -25,7 +25,7 @@ import {
   Mail,
   Loader2
 } from 'lucide-react';
-import { AdminUser, AdminRole, UserStatus } from '@/lib/user-management';
+import { AdminUser, AdminRole, UserStatus } from '@/lib/types';
 
 interface AdminUsersTableProps {
   users: AdminUser[];

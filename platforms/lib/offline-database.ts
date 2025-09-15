@@ -935,7 +935,9 @@ const lowStockAlertSchema: RxJsonSchema<LowStockAlertDocument> = {
   },
   required: ['id', 'tenantId', 'productId', 'locationId', 'alertThreshold', 'createdAt', 'updatedAt'],
   indexes: ['tenantId', 'productId', 'variantId', 'locationId', 'isActive', 'currentStock']
-}\n\n// Product schema aligned with normalized inventory model
+}
+
+// Product schema aligned with normalized inventory model
 const productSchema: RxJsonSchema<ProductDocument> = {
   version: 1,
   primaryKey: 'id',
@@ -990,16 +992,7 @@ const productSchema: RxJsonSchema<ProductDocument> = {
     }
   },
   required: ['id', 'tenantId', 'name', 'price', 'stock', 'updatedAt'],
-  indexes: ['tenantId', 'categoryId', 'supplierId', ['tenantId', 'sku'], ['tenantId', 'barcode'], 'barcode'],
-  migrationStrategies: {
-    // Migration from version 0 to 1: Copy barcode to sku field
-    1: function(oldDoc: any) {
-      if (!oldDoc.sku && oldDoc.barcode) {
-        oldDoc.sku = oldDoc.barcode;
-      }
-      return oldDoc;
-    }
-  }
+  indexes: ['tenantId', 'categoryId', 'supplierId', ['tenantId', 'sku'], ['tenantId', 'barcode'], 'barcode']
 }
 
 // Transaction schema for offline sales

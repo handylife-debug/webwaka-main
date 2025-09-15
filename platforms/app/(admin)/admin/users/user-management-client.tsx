@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { AdminUsersTable } from '@/components/admin/admin-users-table';
 import { UserInvitationForm } from '@/components/admin/user-invitation-form';
 import { sendUserInvitationAction, updateUserStatusAction } from './actions';
-import { AdminUser, AdminRole, UserStatus, ActivityLog } from '@/lib/user-management';
+import { AdminUser, AdminRole, UserStatus, ActivityLog } from '@/lib/types';
 
 interface UserManagementClientProps {
   users: AdminUser[];

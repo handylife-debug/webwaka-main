@@ -16,7 +16,7 @@ import {
   Settings,
   Clock
 } from 'lucide-react';
-import { ActivityLog } from '@/lib/user-management';
+import { ActivityLog } from '@/lib/types';
 
 interface ActivityLogTableProps {
   activities: ActivityLog[];

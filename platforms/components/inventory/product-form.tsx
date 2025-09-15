@@ -44,7 +44,7 @@ export default function ProductForm({ product, onSave, onCancel }: ProductFormPr
     stock: product?.stock || 0,
     image: product?.image || '',
     barcode: product?.barcode || '',
-    sku: product?.sku || ''
+    sku: product?.sku || '',
     description: '',
     unitOfMeasure: 'Each',
     minStockLevel: 0,

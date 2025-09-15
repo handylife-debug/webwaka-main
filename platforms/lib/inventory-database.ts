@@ -435,7 +435,7 @@ class InventoryDatabaseService implements InventoryService {
       const id = `stk_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
       const stockLevel: StockLevelDocument = {
         id,
-        tenantId: this.getTenantId()
+        tenantId: this.getTenantId(),
         productId,
         locationId,
         currentStock: stock,

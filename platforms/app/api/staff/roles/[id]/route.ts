@@ -173,7 +173,7 @@ export const GET = withStaffPermissions('staff.roles')(async function(request: N
       error: error instanceof Error ? error.message : 'Unknown error'
     }, { status: 500 });
   }
-}
+});
 
 // PUT - Update role details
 export const PUT = withStaffPermissions('staff.roles')(async function(request: NextRequest, { params }: { params: { id: string } }) {
@@ -314,7 +314,7 @@ export const PUT = withStaffPermissions('staff.roles')(async function(request: N
       error: error instanceof Error ? error.message : 'Unknown error'
     }, { status: 500 });
   }
-}
+});
 
 // DELETE - Delete role (with safety checks)
 export const DELETE = withStaffPermissions('staff.roles')(async function(request: NextRequest, { params }: { params: { id: string } }) {
@@ -423,4 +423,4 @@ export const DELETE = withStaffPermissions('staff.roles')(async function(request
       error: error instanceof Error ? error.message : 'Unknown error'
     }, { status: 500 });
   }
-}
+});
