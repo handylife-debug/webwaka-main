@@ -1,0 +1,139 @@
+{
+  "id": "auth/AuthenticationCore",
+  "name": "AuthenticationCore",
+  "sector": "auth",
+  "version": "1.0.0",
+  "description": "Core authentication system with multi-factor auth, session management, password policies, and role-based access control",
+  "channels": ["stable", "canary"],
+  "inputs": {
+    "authenticate": {
+      "type": "object",
+      "properties": {
+        "email": { "type": "string", "format": "email" },
+        "password": { "type": "string", "minLength": 8 },
+        "mfaToken": { "type": "string", "optional": true },
+        "rememberMe": { "type": "boolean", "default": false }
+      },
+      "required": ["email", "password"]
+    },
+    "register": {
+      "type": "object",
+      "properties": {
+        "email": { "type": "string", "format": "email" },
+        "password": { "type": "string", "minLength": 8 },
+        "confirmPassword": { "type": "string", "minLength": 8 },
+        "fullName": { "type": "string", "minLength": 2 },
+        "acceptTerms": { "type": "boolean", "const": true }
+      },
+      "required": ["email", "password", "confirmPassword", "fullName", "acceptTerms"]
+    },
+    "validateSession": {
+      "type": "object",
+      "properties": {
+        "sessionToken": { "type": "string" },
+        "userId": { "type": "string" }
+      },
+      "required": ["sessionToken", "userId"]
+    },
+    "resetPassword": {
+      "type": "object",
+      "properties": {
+        "email": { "type": "string", "format": "email" },
+        "resetToken": { "type": "string", "optional": true },
+        "newPassword": { "type": "string", "minLength": 8, "optional": true }
+      },
+      "required": ["email"]
+    },
+    "setupMFA": {
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "method": { "type": "string", "enum": ["totp", "sms", "email"] },
+        "phoneNumber": { "type": "string", "optional": true }
+      },
+      "required": ["userId", "method"]
+    }
+  },
+  "outputs": {
+    "authenticate": {
+      "type": "object",
+      "properties": {
+        "success": { "type": "boolean" },
+        "user": {
+          "type": "object",
+          "properties": {
+            "id": { "type": "string" },
+            "email": { "type": "string" },
+            "fullName": { "type": "string" },
+            "role": { "type": "string" },
+            "permissions": { "type": "array", "items": { "type": "string" } },
+            "mfaEnabled": { "type": "boolean" }
+          }
+        },
+        "sessionToken": { "type": "string" },
+        "refreshToken": { "type": "string" },
+        "expiresAt": { "type": "number" },
+        "message": { "type": "string" }
+      }
+    },
+    "register": {
+      "type": "object",
+      "properties": {
+        "success": { "type": "boolean" },
+        "userId": { "type": "string" },
+        "message": { "type": "string" },
+        "requiresVerification": { "type": "boolean" }
+      }
+    },
+    "validateSession": {
+      "type": "object",
+      "properties": {
+        "valid": { "type": "boolean" },
+        "user": {
+          "type": "object",
+          "properties": {
+            "id": { "type": "string" },
+            "email": { "type": "string" },
+            "role": { "type": "string" },
+            "permissions": { "type": "array", "items": { "type": "string" } }
+          }
+        },
+        "message": { "type": "string" }
+      }
+    },
+    "resetPassword": {
+      "type": "object",
+      "properties": {
+        "success": { "type": "boolean" },
+        "message": { "type": "string" },
+        "resetTokenSent": { "type": "boolean" }
+      }
+    },
+    "setupMFA": {
+      "type": "object",
+      "properties": {
+        "success": { "type": "boolean" },
+        "qrCode": { "type": "string", "optional": true },
+        "backupCodes": { "type": "array", "items": { "type": "string" } },
+        "message": { "type": "string" }
+      }
+    }
+  },
+  "actions": [
+    "authenticate", 
+    "register", 
+    "validateSession", 
+    "logout", 
+    "resetPassword", 
+    "setupMFA", 
+    "verifyMFA", 
+    "refreshToken",
+    "changePassword",
+    "getUserProfile",
+    "updateUserProfile",
+    "checkPasswordStrength"
+  ],
+  "dependencies": [],
+  "created": "2025-01-16T14:00:00Z",
+  "updated": "2025-01-16T14:00:00Z"
+}
