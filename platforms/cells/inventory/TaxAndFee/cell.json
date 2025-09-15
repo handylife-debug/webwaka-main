@@ -1,0 +1,43 @@
+{
+  "id": "inventory/TaxAndFee",
+  "name": "TaxAndFee",
+  "sector": "inventory",
+  "version": "1.0.0",
+  "description": "Calculates tax and fees for transactions with configurable rates and rules",
+  "channels": ["stable", "canary"],
+  "inputs": {
+    "calculate": {
+      "type": "object",
+      "properties": {
+        "amount": { "type": "number", "minimum": 0 },
+        "taxRate": { "type": "number", "minimum": 0, "maximum": 1 },
+        "region": { "type": "string" },
+        "itemType": { "type": "string" }
+      },
+      "required": ["amount", "taxRate"]
+    }
+  },
+  "outputs": {
+    "calculate": {
+      "type": "object",
+      "properties": {
+        "subtotal": { "type": "number" },
+        "tax": { "type": "number" },
+        "fees": { "type": "number" },
+        "total": { "type": "number" },
+        "breakdown": {
+          "type": "object",
+          "properties": {
+            "baseTax": { "type": "number" },
+            "regionTax": { "type": "number" },
+            "processingFee": { "type": "number" }
+          }
+        }
+      }
+    }
+  },
+  "actions": ["calculate", "getRegionRates", "validateTaxId"],
+  "dependencies": [],
+  "created": "2025-09-15T00:00:00Z",
+  "updated": "2025-09-15T00:00:00Z"
+}
