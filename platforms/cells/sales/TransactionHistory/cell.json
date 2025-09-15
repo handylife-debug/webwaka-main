@@ -1,0 +1,660 @@
+{
+  "id": "sales/TransactionHistory",
+  "name": "TransactionHistory",
+  "sector": "sales",
+  "version": "1.0.0",
+  "description": "Enterprise transaction logging and sales analytics cell for Nigerian businesses with comprehensive reporting, refund processing, audit trails, and business intelligence features",
+  "channels": ["stable", "canary"],
+  "type": "cross-cutting",
+  "category": "CC-005.2",
+  "tags": ["transactions", "history", "analytics", "reporting", "refunds", "audit", "nigerian", "business-intelligence", "cross-cutting"],
+  "inputs": {
+    "getTransactionHistory": {
+      "type": "object",
+      "properties": {
+        "filters": {
+          "type": "object",
+          "properties": {
+            "dateRange": {
+              "type": "object",
+              "properties": {
+                "startDate": { "type": "string", "format": "date-time" },
+                "endDate": { "type": "string", "format": "date-time" }
+              }
+            },
+            "status": { "type": "array", "items": { "type": "string", "enum": ["pending", "completed", "failed", "cancelled", "refunded", "partially_refunded"] } },
+            "paymentMethods": { "type": "array", "items": { "type": "string", "enum": ["cash", "card", "mobile_money", "bank_transfer", "split_payment"] } },
+            "cashierId": { "type": "string", "format": "uuid" },
+            "customerId": { "type": "string", "format": "uuid" },
+            "locationId": { "type": "string", "format": "uuid" },
+            "terminalId": { "type": "string", "maxLength": 100 },
+            "transactionNumber": { "type": "string", "maxLength": 100 },
+            "reference": { "type": "string", "maxLength": 100 },
+            "minAmount": { "type": "number", "minimum": 0 },
+            "maxAmount": { "type": "number", "minimum": 0 },
+            "currency": { "type": "string", "enum": ["NGN", "USD", "GBP"] },
+            "productIds": { "type": "array", "items": { "type": "string", "format": "uuid" } },
+            "categoryIds": { "type": "array", "items": { "type": "string", "format": "uuid" } }
+          }
+        },
+        "pagination": {
+          "type": "object",
+          "properties": {
+            "page": { "type": "integer", "minimum": 1, "default": 1 },
+            "limit": { "type": "integer", "minimum": 1, "maximum": 1000, "default": 50 },
+            "sortBy": { "type": "string", "enum": ["createdAt", "total", "transactionNumber", "status"], "default": "createdAt" },
+            "sortOrder": { "type": "string", "enum": ["asc", "desc"], "default": "desc" }
+          }
+        },
+        "includeItems": { "type": "boolean", "default": true },
+        "includePayments": { "type": "boolean", "default": true },
+        "includeCustomer": { "type": "boolean", "default": false },
+        "includeRefunds": { "type": "boolean", "default": false }
+      }
+    },
+    "getTransactionDetails": {
+      "type": "object",
+      "properties": {
+        "transactionId": { "type": "string", "format": "uuid" },
+        "includeAuditTrail": { "type": "boolean", "default": true },
+        "includeRefundHistory": { "type": "boolean", "default": true },
+        "includeRelatedTransactions": { "type": "boolean", "default": false }
+      },
+      "required": ["transactionId"]
+    },
+    "generateSalesReport": {
+      "type": "object",
+      "properties": {
+        "reportType": { "type": "string", "enum": ["daily", "weekly", "monthly", "quarterly", "yearly", "custom"], "default": "daily" },
+        "dateRange": {
+          "type": "object",
+          "properties": {
+            "startDate": { "type": "string", "format": "date-time" },
+            "endDate": { "type": "string", "format": "date-time" }
+          },
+          "required": ["startDate", "endDate"]
+        },
+        "groupBy": { "type": "array", "items": { "type": "string", "enum": ["date", "cashier", "location", "terminal", "product", "category", "payment_method"] } },
+        "metrics": { "type": "array", "items": { "type": "string", "enum": ["revenue", "transactions", "items_sold", "average_transaction", "tax_collected", "discounts_given", "refunds_processed"] } },
+        "filters": {
+          "type": "object",
+          "properties": {
+            "locationIds": { "type": "array", "items": { "type": "string", "format": "uuid" } },
+            "cashierIds": { "type": "array", "items": { "type": "string", "format": "uuid" } },
+            "terminalIds": { "type": "array", "items": { "type": "string" } },
+            "productIds": { "type": "array", "items": { "type": "string", "format": "uuid" } },
+            "categoryIds": { "type": "array", "items": { "type": "string", "format": "uuid" } }
+          }
+        },
+        "format": { "type": "string", "enum": ["json", "pdf", "excel", "csv"], "default": "json" },
+        "currency": { "type": "string", "enum": ["NGN", "USD", "GBP"], "default": "NGN" }
+      },
+      "required": ["reportType", "dateRange"]
+    },
+    "getAnalytics": {
+      "type": "object",
+      "properties": {
+        "analyticsType": { "type": "string", "enum": ["revenue_trends", "product_performance", "cashier_performance", "payment_methods", "customer_behavior", "tax_analysis", "refund_analysis"] },
+        "timeframe": { "type": "string", "enum": ["today", "yesterday", "last_7_days", "last_30_days", "last_90_days", "last_year", "custom"] },
+        "customDateRange": {
+          "type": "object",
+          "properties": {
+            "startDate": { "type": "string", "format": "date-time" },
+            "endDate": { "type": "string", "format": "date-time" }
+          }
+        },
+        "comparisonPeriod": { "type": "boolean", "default": false },
+        "granularity": { "type": "string", "enum": ["hour", "day", "week", "month"], "default": "day" },
+        "topN": { "type": "integer", "minimum": 1, "maximum": 100, "default": 10 }
+      },
+      "required": ["analyticsType", "timeframe"]
+    },
+    "processRefund": {
+      "type": "object",
+      "properties": {
+        "originalTransactionId": { "type": "string", "format": "uuid" },
+        "refundType": { "type": "string", "enum": ["full", "partial", "item_specific"] },
+        "refundAmount": { "type": "number", "minimum": 0 },
+        "refundItems": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "productId": { "type": "string", "format": "uuid" },
+              "variantId": { "type": "string", "format": "uuid" },
+              "quantity": { "type": "number", "minimum": 0.01 },
+              "unitPrice": { "type": "number", "minimum": 0 },
+              "reason": { "type": "string", "maxLength": 500 }
+            },
+            "required": ["productId", "quantity", "reason"]
+          }
+        },
+        "refundReason": { "type": "string", "enum": ["defective", "wrong_item", "customer_request", "policy_return", "damaged", "cancelled_order", "overpayment"] },
+        "refundMethod": { "type": "string", "enum": ["original_payment", "cash", "store_credit", "bank_transfer"] },
+        "notes": { "type": "string", "maxLength": 1000 },
+        "processedBy": { "type": "string", "format": "uuid" },
+        "approvedBy": { "type": "string", "format": "uuid" },
+        "customerInfo": {
+          "type": "object",
+          "properties": {
+            "name": { "type": "string", "maxLength": 255 },
+            "phone": { "type": "string", "maxLength": 20 },
+            "email": { "type": "string", "format": "email" },
+            "idNumber": { "type": "string", "maxLength": 50 }
+          }
+        }
+      },
+      "required": ["originalTransactionId", "refundType", "refundReason", "processedBy"]
+    },
+    "getRefundHistory": {
+      "type": "object",
+      "properties": {
+        "filters": {
+          "type": "object",
+          "properties": {
+            "dateRange": {
+              "type": "object",
+              "properties": {
+                "startDate": { "type": "string", "format": "date-time" },
+                "endDate": { "type": "string", "format": "date-time" }
+              }
+            },
+            "status": { "type": "array", "items": { "type": "string", "enum": ["pending", "approved", "processed", "rejected", "cancelled"] } },
+            "refundType": { "type": "array", "items": { "type": "string", "enum": ["full", "partial", "item_specific"] } },
+            "refundReason": { "type": "array", "items": { "type": "string", "enum": ["defective", "wrong_item", "customer_request", "policy_return", "damaged", "cancelled_order", "overpayment"] } },
+            "processedBy": { "type": "string", "format": "uuid" },
+            "approvedBy": { "type": "string", "format": "uuid" },
+            "minAmount": { "type": "number", "minimum": 0 },
+            "maxAmount": { "type": "number", "minimum": 0 }
+          }
+        },
+        "pagination": {
+          "type": "object",
+          "properties": {
+            "page": { "type": "integer", "minimum": 1, "default": 1 },
+            "limit": { "type": "integer", "minimum": 1, "maximum": 1000, "default": 50 },
+            "sortBy": { "type": "string", "enum": ["createdAt", "refundAmount", "status"], "default": "createdAt" },
+            "sortOrder": { "type": "string", "enum": ["asc", "desc"], "default": "desc" }
+          }
+        }
+      }
+    },
+    "getPaymentAnalytics": {
+      "type": "object",
+      "properties": {
+        "timeframe": { "type": "string", "enum": ["today", "yesterday", "last_7_days", "last_30_days", "last_90_days", "custom"] },
+        "customDateRange": {
+          "type": "object",
+          "properties": {
+            "startDate": { "type": "string", "format": "date-time" },
+            "endDate": { "type": "string", "format": "date-time" }
+          }
+        },
+        "groupBy": { "type": "string", "enum": ["payment_method", "provider", "date", "location"], "default": "payment_method" },
+        "includeFailures": { "type": "boolean", "default": true },
+        "includeFees": { "type": "boolean", "default": true }
+      },
+      "required": ["timeframe"]
+    },
+    "exportTransactions": {
+      "type": "object",
+      "properties": {
+        "format": { "type": "string", "enum": ["csv", "excel", "pdf", "json"], "default": "csv" },
+        "filters": {
+          "type": "object",
+          "properties": {
+            "dateRange": {
+              "type": "object",
+              "properties": {
+                "startDate": { "type": "string", "format": "date-time" },
+                "endDate": { "type": "string", "format": "date-time" }
+              },
+              "required": ["startDate", "endDate"]
+            },
+            "status": { "type": "array", "items": { "type": "string" } },
+            "locationIds": { "type": "array", "items": { "type": "string", "format": "uuid" } },
+            "cashierIds": { "type": "array", "items": { "type": "string", "format": "uuid" } }
+          }
+        },
+        "includeItems": { "type": "boolean", "default": true },
+        "includePayments": { "type": "boolean", "default": true },
+        "includeCustomerData": { "type": "boolean", "default": false },
+        "includeAuditTrail": { "type": "boolean", "default": false }
+      },
+      "required": ["format", "filters"]
+    },
+    "getTaxReport": {
+      "type": "object",
+      "properties": {
+        "reportPeriod": { "type": "string", "enum": ["monthly", "quarterly", "yearly"] },
+        "year": { "type": "integer", "minimum": 2020 },
+        "month": { "type": "integer", "minimum": 1, "maximum": 12 },
+        "quarter": { "type": "integer", "minimum": 1, "maximum": 4 },
+        "includeExemptions": { "type": "boolean", "default": true },
+        "includeBreakdown": { "type": "boolean", "default": true },
+        "format": { "type": "string", "enum": ["json", "pdf", "excel"], "default": "json" }
+      },
+      "required": ["reportPeriod", "year"]
+    },
+    "getAuditTrail": {
+      "type": "object",
+      "properties": {
+        "transactionId": { "type": "string", "format": "uuid" },
+        "eventTypes": { "type": "array", "items": { "type": "string", "enum": ["created", "modified", "paid", "refunded", "voided", "cancelled"] } },
+        "includeSystemEvents": { "type": "boolean", "default": true },
+        "includeUserActions": { "type": "boolean", "default": true }
+      },
+      "required": ["transactionId"]
+    }
+  },
+  "outputs": {
+    "getTransactionHistory": {
+      "type": "object",
+      "properties": {
+        "success": { "type": "boolean" },
+        "transactions": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": { "type": "string", "format": "uuid" },
+              "transactionNumber": { "type": "string" },
+              "reference": { "type": "string" },
+              "total": { "type": "number" },
+              "currency": { "type": "string" },
+              "status": { "type": "string" },
+              "paymentMethods": { "type": "array" },
+              "cashier": { "type": "object" },
+              "customer": { "type": "object" },
+              "location": { "type": "object" },
+              "items": { "type": "array" },
+              "createdAt": { "type": "string", "format": "date-time" },
+              "updatedAt": { "type": "string", "format": "date-time" }
+            }
+          }
+        },
+        "pagination": {
+          "type": "object",
+          "properties": {
+            "total": { "type": "integer" },
+            "page": { "type": "integer" },
+            "limit": { "type": "integer" },
+            "totalPages": { "type": "integer" },
+            "hasMore": { "type": "boolean" }
+          }
+        },
+        "summary": {
+          "type": "object",
+          "properties": {
+            "totalTransactions": { "type": "integer" },
+            "totalRevenue": { "type": "number" },
+            "averageTransaction": { "type": "number" },
+            "totalTax": { "type": "number" },
+            "totalDiscounts": { "type": "number" }
+          }
+        },
+        "message": { "type": "string" },
+        "error": { "type": "string" }
+      }
+    },
+    "generateSalesReport": {
+      "type": "object",
+      "properties": {
+        "success": { "type": "boolean" },
+        "report": {
+          "type": "object",
+          "properties": {
+            "id": { "type": "string", "format": "uuid" },
+            "reportType": { "type": "string" },
+            "dateRange": { "type": "object" },
+            "summary": {
+              "type": "object",
+              "properties": {
+                "totalRevenue": { "type": "number" },
+                "totalTransactions": { "type": "integer" },
+                "totalItems": { "type": "integer" },
+                "averageTransaction": { "type": "number" },
+                "totalTax": { "type": "number" },
+                "totalDiscounts": { "type": "number" },
+                "totalRefunds": { "type": "number" },
+                "netRevenue": { "type": "number" }
+              }
+            },
+            "breakdown": { "type": "array" },
+            "trends": { "type": "array" },
+            "topProducts": { "type": "array" },
+            "paymentMethodBreakdown": { "type": "array" },
+            "generatedAt": { "type": "string", "format": "date-time" },
+            "downloadUrl": { "type": "string" }
+          }
+        },
+        "message": { "type": "string" },
+        "error": { "type": "string" }
+      }
+    },
+    "getAnalytics": {
+      "type": "object",
+      "properties": {
+        "success": { "type": "boolean" },
+        "analytics": {
+          "type": "object",
+          "properties": {
+            "type": { "type": "string" },
+            "timeframe": { "type": "string" },
+            "data": { "type": "array" },
+            "summary": { "type": "object" },
+            "trends": { "type": "array" },
+            "insights": { "type": "array" },
+            "comparisonData": { "type": "object" },
+            "lastUpdated": { "type": "string", "format": "date-time" }
+          }
+        },
+        "message": { "type": "string" },
+        "error": { "type": "string" }
+      }
+    },
+    "processRefund": {
+      "type": "object",
+      "properties": {
+        "success": { "type": "boolean" },
+        "refund": {
+          "type": "object",
+          "properties": {
+            "id": { "type": "string", "format": "uuid" },
+            "refundNumber": { "type": "string" },
+            "originalTransactionId": { "type": "string", "format": "uuid" },
+            "refundAmount": { "type": "number" },
+            "refundType": { "type": "string" },
+            "status": { "type": "string" },
+            "refundMethod": { "type": "string" },
+            "processingTime": { "type": "string" },
+            "refundReceipt": { "type": "string" },
+            "estimatedSettlement": { "type": "string", "format": "date-time" },
+            "createdAt": { "type": "string", "format": "date-time" }
+          }
+        },
+        "inventoryUpdates": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "productId": { "type": "string", "format": "uuid" },
+              "quantityReturned": { "type": "number" },
+              "newStockLevel": { "type": "number" },
+              "locationId": { "type": "string", "format": "uuid" }
+            }
+          }
+        },
+        "message": { "type": "string" },
+        "error": { "type": "string" }
+      }
+    },
+    "getTaxReport": {
+      "type": "object",
+      "properties": {
+        "success": { "type": "boolean" },
+        "taxReport": {
+          "type": "object",
+          "properties": {
+            "id": { "type": "string", "format": "uuid" },
+            "reportPeriod": { "type": "string" },
+            "year": { "type": "integer" },
+            "month": { "type": "integer" },
+            "quarter": { "type": "integer" },
+            "summary": {
+              "type": "object",
+              "properties": {
+                "totalSales": { "type": "number" },
+                "taxableAmount": { "type": "number" },
+                "exemptAmount": { "type": "number" },
+                "vatCollected": { "type": "number" },
+                "vatRate": { "type": "number" },
+                "totalTax": { "type": "number" }
+              }
+            },
+            "breakdown": {
+              "type": "object",
+              "properties": {
+                "standardVAT": { "type": "number" },
+                "exemptSales": { "type": "number" },
+                "luxuryTax": { "type": "number" },
+                "serviceTax": { "type": "number" }
+              }
+            },
+            "categoryBreakdown": { "type": "array" },
+            "complianceStatus": { "type": "string" },
+            "generatedAt": { "type": "string", "format": "date-time" },
+            "downloadUrl": { "type": "string" }
+          }
+        },
+        "message": { "type": "string" },
+        "error": { "type": "string" }
+      }
+    },
+    "exportTransactions": {
+      "type": "object",
+      "properties": {
+        "success": { "type": "boolean" },
+        "export": {
+          "type": "object",
+          "properties": {
+            "id": { "type": "string", "format": "uuid" },
+            "format": { "type": "string" },
+            "filename": { "type": "string" },
+            "downloadUrl": { "type": "string" },
+            "fileSize": { "type": "integer" },
+            "recordCount": { "type": "integer" },
+            "generatedAt": { "type": "string", "format": "date-time" },
+            "expiresAt": { "type": "string", "format": "date-time" }
+          }
+        },
+        "message": { "type": "string" },
+        "error": { "type": "string" }
+      }
+    }
+  },
+  "actions": [
+    "getTransactionHistory",
+    "getTransactionDetails",
+    "searchTransactions",
+    "generateSalesReport",
+    "generateDailySalesReport",
+    "generateWeeklySalesReport",
+    "generateMonthlySalesReport",
+    "getAnalytics",
+    "getRevenueAnalytics",
+    "getProductAnalytics",
+    "getCashierAnalytics",
+    "getCustomerAnalytics",
+    "getPaymentAnalytics",
+    "processRefund",
+    "approveRefund",
+    "rejectRefund",
+    "getRefundHistory",
+    "getRefundDetails",
+    "calculateRefundAmount",
+    "validateRefundEligibility",
+    "exportTransactions",
+    "importTransactions",
+    "reconcileTransactions",
+    "getTaxReport",
+    "getNigerianVATReport",
+    "getTaxBreakdown",
+    "validateTaxCompliance",
+    "getAuditTrail",
+    "logTransactionEvent",
+    "getTransactionEvents",
+    "validateTransactionIntegrity",
+    "archiveOldTransactions",
+    "getPerformanceMetrics",
+    "getBusinessInsights",
+    "getFraudDetection",
+    "getComplianceReport",
+    "scheduleReport",
+    "getScheduledReports",
+    "deleteScheduledReport",
+    "getReportHistory",
+    "downloadReport",
+    "shareReport",
+    "getInventoryImpact",
+    "getCustomerInsights",
+    "getLoyaltyImpact",
+    "getSeasonalTrends",
+    "getPeakHours",
+    "getLocationComparison"
+  ],
+  "dependencies": {
+    "internal": [
+      "sales/SalesEngine",
+      "auth/AuthenticationCore",
+      "auth/JWTTokenManager",
+      "payment/PaymentGatewayCore",
+      "inventory/ProductCatalog",
+      "inventory/InventoryTracking",
+      "customer/CustomerProfile"
+    ],
+    "external": [
+      "zod",
+      "uuid",
+      "moment-timezone",
+      "pdfkit",
+      "exceljs",
+      "csv-parser",
+      "json2csv",
+      "chartjs",
+      "d3",
+      "lodash"
+    ]
+  },
+  "environment": {
+    "required": [
+      "DATABASE_URL",
+      "JWT_ACCESS_SECRET"
+    ],
+    "optional": [
+      "ANALYTICS_RETENTION_DAYS",
+      "REPORT_STORAGE_PATH",
+      "TAX_AUTHORITY_API_URL",
+      "COMPLIANCE_WEBHOOK_URL",
+      "BACKUP_STORAGE_URL"
+    ]
+  },
+  "features": {
+    "transactionLogging": {
+      "comprehensiveAuditTrail": true,
+      "realTimeLogging": true,
+      "immutableRecords": true,
+      "dataIntegrity": true,
+      "complianceLogging": true
+    },
+    "salesReporting": {
+      "multipleFormats": true,
+      "scheduledReports": true,
+      "customDateRanges": true,
+      "multiCurrency": true,
+      "comparativePeriods": true,
+      "drillDownCapability": true
+    },
+    "analytics": {
+      "realTimeAnalytics": true,
+      "predictiveAnalytics": true,
+      "trendsAnalysis": true,
+      "performanceMetrics": true,
+      "businessIntelligence": true,
+      "customDashboards": true
+    },
+    "refundProcessing": {
+      "multipleRefundTypes": true,
+      "approvalWorkflow": true,
+      "inventoryRestoration": true,
+      "paymentReversals": true,
+      "refundReceipts": true,
+      "fraudDetection": true
+    },
+    "taxCompliance": {
+      "nigerianVATCompliance": true,
+      "automaticTaxCalculation": true,
+      "exemptionHandling": true,
+      "taxReporting": true,
+      "auditReadyReports": true
+    },
+    "dataExport": {
+      "multipleFormats": true,
+      "largeDatasets": true,
+      "scheduledExports": true,
+      "secureDownloads": true,
+      "dataFiltering": true
+    },
+    "businessIntelligence": {
+      "salesForecasting": true,
+      "customerSegmentation": true,
+      "productPerformance": true,
+      "seasonalAnalysis": true,
+      "staffPerformance": true,
+      "locationAnalysis": true
+    }
+  },
+  "api": {
+    "endpoints": [
+      {
+        "path": "/api/cells/sales/TransactionHistory",
+        "method": "POST",
+        "description": "Main transaction history API endpoint for all operations"
+      },
+      {
+        "path": "/api/cells/sales/TransactionHistory",
+        "method": "GET",
+        "description": "Retrieve transaction history with filters and pagination"
+      }
+    ]
+  },
+  "security": {
+    "authentication": "required",
+    "authorization": "role-based",
+    "auditLogging": "comprehensive",
+    "dataEncryption": "field-level",
+    "dataRetention": "configurable",
+    "accessControl": "granular",
+    "rateLimit": {
+      "requests": 100,
+      "window": "15m"
+    }
+  },
+  "compliance": {
+    "nigerian": {
+      "vatReporting": true,
+      "auditTrails": true,
+      "dataRetention": "7_years",
+      "taxAuthority": "compliant"
+    },
+    "international": {
+      "gdpr": "data-minimal",
+      "sox": "audit-trail",
+      "pciDss": "applicable"
+    }
+  },
+  "monitoring": {
+    "events": [
+      "transaction.logged",
+      "report.generated",
+      "refund.processed",
+      "analytics.calculated",
+      "export.completed",
+      "audit.accessed",
+      "compliance.validated",
+      "data.archived"
+    ],
+    "metrics": [
+      "transaction_volume",
+      "transaction_value",
+      "report_generation_time",
+      "refund_processing_time",
+      "analytics_query_time",
+      "export_file_size",
+      "data_integrity_score",
+      "compliance_score"
+    ]
+  },
+  "created": "2025-09-15T00:00:00Z",
+  "updated": "2025-09-15T00:00:00Z"
+}
