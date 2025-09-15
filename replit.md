@@ -40,6 +40,10 @@ Preferred communication style: Simple, everyday language.
 - **CustomerProfile Cell (CC-004.1)**: Comprehensive customer data management with Nigerian phone validation, multi-language support (English, Hausa, Yoruba, Igbo), SMS/WhatsApp integration, state/LGA geographic support, mobile-first design, contact/address management, demographics tracking
 - **CustomerEngagement Cell (CC-004.2)**: Advanced loyalty programs with points/tier systems, purchase behavior analytics, Nigerian market insights (cash vs digital tracking, family loyalty programs), engagement scoring, retention campaigns, seasonal marketing for Nigerian holidays, recharts-powered analytics dashboard
 
+### Core Sales/Transaction Processing Cells (Cross-Cutting CC-005) ✅ COMPLETE
+- **SalesEngine Cell (CC-005.1)**: Core POS transaction processing with cart management, Nigerian VAT compliance (7.5%), multi-payment support (cash, card, mobile money, bank transfer), receipt generation with QR codes, offline-first design with UUID session management, enterprise security with JWT authentication and audit logging
+- **TransactionHistory Cell (CC-005.2)**: Comprehensive transaction logging and sales reporting with advanced filtering, refund processing with Nigerian business rules, sales analytics (revenue trends, product/cashier performance), tax compliance reporting (VAT, luxury tax, withholding tax), audit trails for regulatory compliance, report generation in multiple formats
+
 ### Legacy Admin Enhancement Cells  
 - **TenantDetails Cell**: Comprehensive tenant detail management with real-time analytics
 - **TenantFeatureToggle Cell**: Professional feature toggle management with persistence
