@@ -1,0 +1,296 @@
+{
+  "id": "customer/CustomerEngagement",
+  "name": "CustomerEngagement",
+  "sector": "customer",
+  "version": "1.0.0",
+  "description": "Comprehensive customer engagement and loyalty management with Nigerian market features including points-based rewards, tiered loyalty programs, and cultural marketing automation",
+  "channels": ["stable", "canary"],
+  "inputs": {
+    "getLoyaltyProgram": {
+      "type": "object",
+      "properties": {
+        "tenantId": { "type": "string" },
+        "customerId": { "type": "string" },
+        "includePurchaseHistory": { "type": "boolean" },
+        "includeRewardHistory": { "type": "boolean" },
+        "includeEngagementMetrics": { "type": "boolean" }
+      },
+      "required": ["tenantId", "customerId"]
+    },
+    "updateLoyaltyPoints": {
+      "type": "object",
+      "properties": {
+        "tenantId": { "type": "string" },
+        "customerId": { "type": "string" },
+        "points": { "type": "number" },
+        "action": { "type": "string" },
+        "reason": { "type": "string" },
+        "transactionId": { "type": "string" },
+        "expiryDate": { "type": "string" }
+      },
+      "required": ["tenantId", "customerId", "points", "action"]
+    },
+    "createLoyaltyReward": {
+      "type": "object",
+      "properties": {
+        "tenantId": { "type": "string" },
+        "rewardData": {
+          "type": "object",
+          "properties": {
+            "name": { "type": "string" },
+            "description": { "type": "string" },
+            "rewardType": { "type": "string" },
+            "pointsCost": { "type": "number" },
+            "cashValue": { "type": "number" },
+            "validityPeriod": { "type": "number" },
+            "minTier": { "type": "string" },
+            "maxRedemptions": { "type": "number" },
+            "isActive": { "type": "boolean" },
+            "conditions": { "type": "object" }
+          }
+        }
+      },
+      "required": ["tenantId", "rewardData"]
+    },
+    "redeemReward": {
+      "type": "object",
+      "properties": {
+        "tenantId": { "type": "string" },
+        "customerId": { "type": "string" },
+        "rewardId": { "type": "string" },
+        "quantity": { "type": "number" },
+        "notes": { "type": "string" }
+      },
+      "required": ["tenantId", "customerId", "rewardId"]
+    },
+    "analyzePurchaseBehavior": {
+      "type": "object",
+      "properties": {
+        "tenantId": { "type": "string" },
+        "customerId": { "type": "string" },
+        "timeRange": { "type": "string" },
+        "includePredictions": { "type": "boolean" },
+        "includeRecommendations": { "type": "boolean" }
+      },
+      "required": ["tenantId", "customerId"]
+    },
+    "getCustomerSegments": {
+      "type": "object",
+      "properties": {
+        "tenantId": { "type": "string" },
+        "customerId": { "type": "string" },
+        "includeAutomation": { "type": "boolean" }
+      },
+      "required": ["tenantId"]
+    },
+    "createEngagementCampaign": {
+      "type": "object",
+      "properties": {
+        "tenantId": { "type": "string" },
+        "campaignData": {
+          "type": "object",
+          "properties": {
+            "name": { "type": "string" },
+            "description": { "type": "string" },
+            "campaignType": { "type": "string" },
+            "targetSegment": { "type": "string" },
+            "channels": { "type": "array" },
+            "message": { "type": "string" },
+            "language": { "type": "string" },
+            "startDate": { "type": "string" },
+            "endDate": { "type": "string" },
+            "budget": { "type": "number" },
+            "triggers": { "type": "object" },
+            "rewards": { "type": "object" }
+          }
+        }
+      },
+      "required": ["tenantId", "campaignData"]
+    },
+    "trackEngagement": {
+      "type": "object",
+      "properties": {
+        "tenantId": { "type": "string" },
+        "customerId": { "type": "string" },
+        "engagementType": { "type": "string" },
+        "channel": { "type": "string" },
+        "content": { "type": "string" },
+        "metadata": { "type": "object" }
+      },
+      "required": ["tenantId", "customerId", "engagementType", "channel"]
+    },
+    "calculateLoyaltyMetrics": {
+      "type": "object",
+      "properties": {
+        "tenantId": { "type": "string" },
+        "timeRange": { "type": "string" },
+        "segmentId": { "type": "string" },
+        "includeProjections": { "type": "boolean" }
+      },
+      "required": ["tenantId"]
+    },
+    "exportEngagementData": {
+      "type": "object",
+      "properties": {
+        "tenantId": { "type": "string" },
+        "filters": { "type": "object" },
+        "format": { "type": "string" },
+        "fields": { "type": "array" }
+      },
+      "required": ["tenantId"]
+    }
+  },
+  "outputs": {
+    "getLoyaltyProgram": {
+      "type": "object",
+      "properties": {
+        "success": { "type": "boolean" },
+        "loyaltyProfile": {
+          "type": "object",
+          "properties": {
+            "customerId": { "type": "string" },
+            "currentPoints": { "type": "number" },
+            "lifetimePoints": { "type": "number" },
+            "currentTier": { "type": "string" },
+            "nextTier": { "type": "string" },
+            "pointsToNextTier": { "type": "number" },
+            "expiringPoints": { "type": "number" },
+            "purchaseHistory": { "type": "array" },
+            "rewardHistory": { "type": "array" },
+            "engagementScore": { "type": "number" },
+            "averageSpend": { "type": "number" },
+            "visitFrequency": { "type": "number" }
+          }
+        }
+      }
+    },
+    "updateLoyaltyPoints": {
+      "type": "object",
+      "properties": {
+        "success": { "type": "boolean" },
+        "newBalance": { "type": "number" },
+        "transactionId": { "type": "string" },
+        "tierChange": { "type": "object" },
+        "message": { "type": "string" }
+      }
+    },
+    "redeemReward": {
+      "type": "object",
+      "properties": {
+        "success": { "type": "boolean" },
+        "redemptionId": { "type": "string" },
+        "pointsDeducted": { "type": "number" },
+        "remainingPoints": { "type": "number" },
+        "reward": { "type": "object" },
+        "deliveryMethod": { "type": "string" }
+      }
+    },
+    "analyzePurchaseBehavior": {
+      "type": "object",
+      "properties": {
+        "success": { "type": "boolean" },
+        "behaviorAnalysis": {
+          "type": "object",
+          "properties": {
+            "purchasePattern": { "type": "object" },
+            "seasonality": { "type": "object" },
+            "categoryPreferences": { "type": "array" },
+            "paymentPreferences": { "type": "object" },
+            "churnRisk": { "type": "string" },
+            "lifetimeValuePrediction": { "type": "number" },
+            "recommendations": { "type": "array" }
+          }
+        }
+      }
+    },
+    "getCustomerSegments": {
+      "type": "object",
+      "properties": {
+        "success": { "type": "boolean" },
+        "segments": { "type": "array" },
+        "customerSegment": { "type": "object" },
+        "automationRules": { "type": "array" }
+      }
+    },
+    "createEngagementCampaign": {
+      "type": "object",
+      "properties": {
+        "success": { "type": "boolean" },
+        "campaignId": { "type": "string" },
+        "estimatedReach": { "type": "number" },
+        "estimatedCost": { "type": "number" },
+        "scheduledDate": { "type": "string" }
+      }
+    },
+    "calculateLoyaltyMetrics": {
+      "type": "object",
+      "properties": {
+        "success": { "type": "boolean" },
+        "metrics": {
+          "type": "object",
+          "properties": {
+            "totalLoyaltyMembers": { "type": "number" },
+            "activeMembers": { "type": "number" },
+            "pointsIssued": { "type": "number" },
+            "pointsRedeemed": { "type": "number" },
+            "averageEngagementScore": { "type": "number" },
+            "topPerformingRewards": { "type": "array" },
+            "tierDistribution": { "type": "object" },
+            "churnRate": { "type": "number" },
+            "retentionRate": { "type": "number" }
+          }
+        }
+      }
+    }
+  },
+  "actions": [
+    "getLoyaltyProgram: Retrieve comprehensive customer loyalty profile and metrics",
+    "updateLoyaltyPoints: Add, deduct, or transfer loyalty points with audit trail",
+    "createLoyaltyReward: Define new rewards with Nigerian market appeal",
+    "redeemReward: Process reward redemption with validation and delivery",
+    "analyzePurchaseBehavior: Deep analysis of customer purchase patterns and predictions",
+    "getCustomerSegments: Retrieve customer segments and automation rules",
+    "createEngagementCampaign: Design and schedule targeted marketing campaigns",
+    "trackEngagement: Log customer engagement across all touchpoints",
+    "calculateLoyaltyMetrics: Generate comprehensive loyalty program analytics",
+    "exportEngagementData: Export engagement and loyalty data for analysis",
+    "manageTierProgression: Handle automatic tier upgrades and downgrades",
+    "calculateCashback: Compute cash-back rewards for Nigerian market",
+    "scheduleRetentionCampaigns: Automate retention campaigns for at-risk customers"
+  ],
+  "dependencies": {
+    "database": ["customers", "customer_loyalty", "loyalty_rewards", "loyalty_transactions", "customer_segments", "engagement_campaigns", "customer_interactions"],
+    "services": ["pos-transactions", "sms-service", "email-service", "analytics-engine"],
+    "integrations": ["twilio", "replitmail", "payment-gateways"],
+    "cells": ["CustomerProfile", "InventoryTracking", "PaymentGatewayCore"],
+    "ui": ["shadcn/ui", "lucide-react", "recharts", "react-hook-form"]
+  },
+  "features": {
+    "loyaltyPrograms": true,
+    "pointsManagement": true,
+    "tieredRewards": true,
+    "cashbackPrograms": true,
+    "purchaseAnalytics": true,
+    "customerSegmentation": true,
+    "engagementTracking": true,
+    "marketingAutomation": true,
+    "retentionCampaigns": true,
+    "rewardRedemption": true,
+    "nigerianMarketFeatures": true,
+    "multiLanguageRewards": true,
+    "mobileIntegration": true,
+    "culturalMarketing": true
+  },
+  "nigerianMarketFeatures": {
+    "cashbackPrograms": "Traditional cash-back rewards popular in Nigerian retail",
+    "familyLoyalty": "Extended family member benefits and shared points",
+    "seasonalRewards": "Ramadan, Christmas, and local festival special campaigns",
+    "bulkPurchaseIncentives": "Rewards for wholesale and bulk buying patterns",
+    "mobileMoneyIntegration": "Integration with mobile money wallets for rewards",
+    "localPartnerRewards": "Partnerships with local businesses for cross-promotions",
+    "communityEngagement": "Local community event participation rewards",
+    "culturalConsiderations": "Culturally appropriate rewards and messaging"
+  },
+  "created": "2025-09-15T00:00:00Z",
+  "updated": "2025-09-15T00:00:00Z"
+}
