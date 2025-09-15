@@ -1,0 +1,42 @@
+{
+  "id": "admin/PlanDetailsModal",
+  "name": "PlanDetailsModal",
+  "sector": "admin",
+  "version": "1.0.0",
+  "description": "Professional plan detail modal with comprehensive information, editing capabilities, and usage analytics",
+  "channels": ["stable", "canary"],
+  "inputs": {
+    "renderPlanModal": {
+      "type": "object",
+      "properties": {
+        "planId": { "type": "string" },
+        "planData": {
+          "type": "object",
+          "properties": {
+            "id": { "type": "string" },
+            "name": { "type": "string" },
+            "description": { "type": "string" },
+            "price": { "type": "number" },
+            "interval": { "type": "string" },
+            "features": { "type": "array" },
+            "limits": { "type": "object" }
+          }
+        }
+      },
+      "required": ["planId", "planData"]
+    }
+  },
+  "outputs": {
+    "renderPlanModal": {
+      "type": "object",
+      "properties": {
+        "component": { "type": "string" },
+        "analytics": { "type": "object" }
+      }
+    }
+  },
+  "actions": ["renderPlanModal", "updatePlan", "getPlanAnalytics"],
+  "dependencies": [],
+  "created": "2025-01-16T00:00:00Z",
+  "updated": "2025-01-16T00:00:00Z"
+}

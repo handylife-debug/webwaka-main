@@ -32,6 +32,8 @@ import { protocol, rootDomain } from '@/lib/utils';
 interface TenantDataTableProps {
   tenants: EnhancedTenant[];
   onStatusChange?: (subdomain: string, status: TenantStatus) => Promise<void>;
+  onViewDetails?: (tenant: EnhancedTenant) => void;
+  onConfigureFeatures?: (tenant: EnhancedTenant) => void;
 }
 
 function getStatusColor(status: TenantStatus): string {
@@ -62,7 +64,7 @@ function getPlanColor(plan: string): string {
   }
 }
 
-export function TenantDataTable({ tenants, onStatusChange }: TenantDataTableProps) {
+export function TenantDataTable({ tenants, onStatusChange, onViewDetails, onConfigureFeatures }: TenantDataTableProps) {
   const [loadingActions, setLoadingActions] = useState<Record<string, boolean>>({});
 
   const handleStatusChange = async (subdomain: string, status: TenantStatus) => {
@@ -77,15 +79,17 @@ export function TenantDataTable({ tenants, onStatusChange }: TenantDataTableProp
   };
 
   const handleViewDetails = (subdomain: string) => {
-    // In a real app, this would navigate to a detailed view
-    console.log('View details for:', subdomain);
-    alert(`View details for ${subdomain} (Feature coming soon)`);
+    const tenant = tenants.find(t => t.subdomain === subdomain);
+    if (tenant && onViewDetails) {
+      onViewDetails(tenant);
+    }
   };
 
   const handleConfigureFeatures = (subdomain: string) => {
-    // In a real app, this would open a feature configuration modal
-    console.log('Configure features for:', subdomain);
-    alert(`Configure features for ${subdomain} (Feature coming soon)`);
+    const tenant = tenants.find(t => t.subdomain === subdomain);
+    if (tenant && onConfigureFeatures) {
+      onConfigureFeatures(tenant);
+    }
   };
 
   if (tenants.length === 0) {

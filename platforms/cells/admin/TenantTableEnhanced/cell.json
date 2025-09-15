@@ -1,0 +1,51 @@
+{
+  "id": "admin/TenantTableEnhanced",
+  "name": "TenantTableEnhanced", 
+  "sector": "admin",
+  "version": "1.0.0",
+  "description": "Advanced tenant table with search, filtering, pagination, sorting, and bulk operations",
+  "channels": ["stable", "canary"],
+  "inputs": {
+    "renderTable": {
+      "type": "object",
+      "properties": {
+        "tenants": { "type": "array" },
+        "filters": { "type": "object" },
+        "pagination": { "type": "object" },
+        "sorting": { "type": "object" }
+      },
+      "required": ["tenants"]
+    },
+    "bulkAction": {
+      "type": "object", 
+      "properties": {
+        "action": { "type": "string" },
+        "tenantIds": { "type": "array" },
+        "params": { "type": "object" }
+      },
+      "required": ["action", "tenantIds"]
+    }
+  },
+  "outputs": {
+    "renderTable": {
+      "type": "object",
+      "properties": {
+        "component": { "type": "string" },
+        "filteredTenants": { "type": "array" },
+        "totalCount": { "type": "number" }
+      }
+    },
+    "bulkAction": {
+      "type": "object",
+      "properties": {
+        "success": { "type": "boolean" },
+        "message": { "type": "string" },
+        "affectedCount": { "type": "number" }
+      }
+    }
+  },
+  "actions": ["renderTable", "bulkAction", "exportData", "searchTenants"],
+  "dependencies": [],
+  "created": "2025-01-16T00:00:00Z",
+  "updated": "2025-01-16T00:00:00Z"
+}

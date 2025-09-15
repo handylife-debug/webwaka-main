@@ -3,7 +3,9 @@
 import { useState } from 'react';
 import { AdminUsersTable } from '@/components/admin/admin-users-table';
 import { UserInvitationForm } from '@/components/admin/user-invitation-form';
+import { UserDetailsCell } from '@/cells/admin/UserDetails/src/client';
 import { sendUserInvitationAction, updateUserStatusAction } from './actions';
+import { updateUserAction } from './user-actions';
 import { AdminUser, AdminRole, UserStatus, ActivityLog } from '@/lib/types';
 
 interface UserManagementClientProps {
@@ -16,6 +18,8 @@ export function UserManagementClient({
   activities 
 }: UserManagementClientProps) {
   const [users, setUsers] = useState(initialUsers);
+  const [selectedUser, setSelectedUser] = useState<AdminUser | null>(null);
+  const [showUserDetails, setShowUserDetails] = useState(false);
   const [notification, setNotification] = useState<{
     type: 'success' | 'error';
     message: string;
@@ -87,8 +91,78 @@ export function UserManagementClient({
   };
 
   const handleViewDetails = (user: AdminUser) => {
-    // In a real application, this would open a detailed user modal
-    alert(`User Details:\n\nName: ${user.name}\nEmail: ${user.email}\nRole: ${user.role}\nStatus: ${user.status}\nInvited By: ${user.invitedBy}\nCreated: ${new Date(user.createdAt).toLocaleDateString()}`);
+    setSelectedUser(user);
+    setShowUserDetails(true);
+  };
+
+  const handleUserUpdate = async (userId: string, updates: any) => {
+    try {
+      const result = await updateUserAction(userId, updates);
+      
+      if (result.success) {
+        // Update local state optimistically
+        setUsers(prev => 
+          prev.map(user => 
+            user.id === userId 
+              ? { ...user, ...updates }
+              : user
+          )
+        );
+        
+        setNotification({
+          type: 'success',
+          message: 'User updated successfully'
+        });
+      } else {
+        setNotification({
+          type: 'error',
+          message: result.message || 'Failed to update user'
+        });
+      }
+    } catch (error) {
+      setNotification({
+        type: 'error',
+        message: 'An unexpected error occurred while updating user'
+      });
+    } finally {
+      // Clear notification after 3 seconds
+      setTimeout(() => setNotification(null), 3000);
+    }
+  };
+
+  const handleUserStatusChange = async (userId: string, status: UserStatus) => {
+    try {
+      const result = await updateUserStatusAction(userId, status);
+      
+      if (result.success) {
+        // Update local state optimistically
+        setUsers(prev => 
+          prev.map(user => 
+            user.id === userId 
+              ? { ...user, status }
+              : user
+          )
+        );
+        
+        setNotification({
+          type: 'success',
+          message: result.message || 'User status updated successfully'
+        });
+      } else {
+        setNotification({
+          type: 'error',
+          message: result.error || 'Failed to update user status'
+        });
+      }
+    } catch (error) {
+      setNotification({
+        type: 'error',
+        message: 'An unexpected error occurred'
+      });
+    } finally {
+      // Clear notification after 3 seconds
+      setTimeout(() => setNotification(null), 3000);
+    }
   };
 
   return (
@@ -112,6 +186,15 @@ export function UserManagementClient({
           onViewDetails={handleViewDetails}
         />
       </div>
+
+      {/* User Details Modal */}
+      <UserDetailsCell
+        isOpen={showUserDetails}
+        onClose={() => setShowUserDetails(false)}
+        user={selectedUser}
+        onUpdate={handleUserUpdate}
+        onStatusChange={handleUserStatusChange}
+      />
 
       {/* Notification Toast */}
       {notification && (

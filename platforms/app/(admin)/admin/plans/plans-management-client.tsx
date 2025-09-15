@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { PlansDataTable } from '@/components/admin/plans-data-table';
 import { PlanForm } from '@/components/admin/plan-form';
+import { PlanDetailsModalCell } from '@/cells/admin/PlanDetailsModal/src/client';
 import { createPlanAction, updatePlanAction, updatePlanStatusAction } from './actions';
 import { SubscriptionPlan, CreatePlanData, PlanStatus } from '@/lib/plans-management';
 
@@ -17,6 +18,8 @@ export function PlansManagementClient({
 }: PlansManagementClientProps) {
   const [plans, setPlans] = useState(initialPlans);
   const [editingPlan, setEditingPlan] = useState<SubscriptionPlan | null>(null);
+  const [selectedPlan, setSelectedPlan] = useState<SubscriptionPlan | null>(null);
+  const [showPlanDetails, setShowPlanDetails] = useState(false);
   const [notification, setNotification] = useState<{
     type: 'success' | 'error';
     message: string;
@@ -141,15 +144,48 @@ export function PlansManagementClient({
   };
 
   const handleViewDetails = (plan: SubscriptionPlan) => {
-    const featuresText = plan.features.map(f => 
-      `• ${f.name}${f.limit ? ` (${f.limit} limit)` : ''}: ${f.included ? 'Included' : 'Not included'}`
-    ).join('\n');
-    
-    const limitsText = Object.entries(plan.limits).map(([key, value]) => 
-      `• ${key}: ${value}`
-    ).join('\n');
+    setSelectedPlan(plan);
+    setShowPlanDetails(true);
+  };
 
-    alert(`Plan Details:\n\nName: ${plan.name}\nDescription: ${plan.description || 'No description'}\nPrice: ₦${plan.price.toLocaleString()}/${plan.interval}\nStatus: ${plan.status}\nTrial Days: ${plan.trialDays || 0}\nPopular: ${plan.isPopular ? 'Yes' : 'No'}\n\nFeatures:\n${featuresText}\n\nLimits:\n${limitsText}\n\nCreated: ${plan.createdAt.toLocaleDateString()}\nUpdated: ${plan.updatedAt.toLocaleDateString()}`);
+  const handlePlanUpdate = async (planId: string, updates: any) => {
+    try {
+      const result = await updatePlanAction(planId, updates);
+      
+      if (result.success) {
+        // Update local state optimistically
+        setPlans(prev => 
+          prev.map(plan => 
+            plan.id === planId 
+              ? { ...plan, ...updates, updatedAt: new Date() }
+              : plan
+          )
+        );
+        
+        setNotification({
+          type: 'success',
+          message: 'Plan updated successfully'
+        });
+        
+        return { success: true };
+      } else {
+        setNotification({
+          type: 'error',
+          message: result.error || 'Failed to update plan'
+        });
+        return { success: false, error: result.error };
+      }
+    } catch (error) {
+      const errorMessage = 'An unexpected error occurred';
+      setNotification({
+        type: 'error',
+        message: errorMessage
+      });
+      return { success: false, error: errorMessage };
+    } finally {
+      // Clear notification after 3 seconds
+      setTimeout(() => setNotification(null), 3000);
+    }
   };
 
   return (
@@ -185,6 +221,14 @@ export function PlansManagementClient({
           onViewDetails={handleViewDetails}
         />
       </div>
+
+      {/* Plan Details Modal */}
+      <PlanDetailsModalCell
+        isOpen={showPlanDetails}
+        onClose={() => setShowPlanDetails(false)}
+        plan={selectedPlan}
+        onUpdate={handlePlanUpdate}
+      />
 
       {/* Notification Toast */}
       {notification && (
