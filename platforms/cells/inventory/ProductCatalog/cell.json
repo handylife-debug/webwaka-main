@@ -1,0 +1,268 @@
+{
+  "id": "inventory/ProductCatalog",
+  "name": "ProductCatalog",
+  "sector": "inventory",
+  "version": "1.0.0",
+  "description": "Comprehensive product catalog management for Nigerian businesses with multi-currency support, bulk operations, and VAT compliance",
+  "channels": ["stable", "canary"],
+  "inputs": {
+    "createProduct": {
+      "type": "object",
+      "properties": {
+        "productCode": { "type": "string", "maxLength": 100 },
+        "productName": { "type": "string", "maxLength": 200 },
+        "sku": { "type": "string", "maxLength": 100 },
+        "barcode": { "type": "string", "maxLength": 100 },
+        "categoryId": { "type": "string", "format": "uuid" },
+        "supplierId": { "type": "string", "format": "uuid" },
+        "brand": { "type": "string", "maxLength": 100 },
+        "unitOfMeasure": { "type": "string", "maxLength": 50, "default": "each" },
+        "costPrice": { "type": "number", "minimum": 0 },
+        "sellingPrice": { "type": "number", "minimum": 0 },
+        "currency": { "type": "string", "enum": ["NGN", "USD", "GBP"], "default": "NGN" },
+        "bulkPricing": {
+          "type": "object",
+          "properties": {
+            "minQuantity": { "type": "integer", "minimum": 1 },
+            "unitPrice": { "type": "number", "minimum": 0 }
+          }
+        },
+        "unitConversions": {
+          "type": "object",
+          "properties": {
+            "piecesPerCarton": { "type": "integer", "minimum": 1 },
+            "cartonsPerPallet": { "type": "integer", "minimum": 1 }
+          }
+        },
+        "minStockLevel": { "type": "integer", "minimum": 0 },
+        "maxStockLevel": { "type": "integer", "minimum": 0 },
+        "reorderPoint": { "type": "integer", "minimum": 0 },
+        "reorderQuantity": { "type": "integer", "minimum": 1 },
+        "isTaxable": { "type": "boolean", "default": true },
+        "description": { "type": "string" },
+        "imageUrl": { "type": "string", "maxLength": 500 },
+        "weight": { "type": "number", "minimum": 0 },
+        "dimensions": { "type": "string", "maxLength": 100 },
+        "isActive": { "type": "boolean", "default": true },
+        "metadata": { "type": "object" }
+      },
+      "required": ["productCode", "productName", "sellingPrice"]
+    },
+    "updateProduct": {
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "format": "uuid" },
+        "updates": { "$ref": "#/inputs/createProduct" }
+      },
+      "required": ["id"]
+    },
+    "createCategory": {
+      "type": "object",
+      "properties": {
+        "categoryCode": { "type": "string", "maxLength": 50 },
+        "categoryName": { "type": "string", "maxLength": 100 },
+        "parentCategoryId": { "type": "string", "format": "uuid" },
+        "description": { "type": "string" },
+        "taxRate": { "type": "number", "minimum": 0, "maximum": 1, "default": 0.075 },
+        "isActive": { "type": "boolean", "default": true }
+      },
+      "required": ["categoryCode", "categoryName"]
+    },
+    "createVariant": {
+      "type": "object",
+      "properties": {
+        "productId": { "type": "string", "format": "uuid" },
+        "variantCode": { "type": "string", "maxLength": 100 },
+        "variantName": { "type": "string", "maxLength": 200 },
+        "variantType": { "type": "string", "enum": ["size", "color", "style", "material", "flavor", "other"] },
+        "variantValue": { "type": "string", "maxLength": 100 },
+        "sku": { "type": "string", "maxLength": 100 },
+        "barcode": { "type": "string", "maxLength": 100 },
+        "costPrice": { "type": "number", "minimum": 0 },
+        "sellingPrice": { "type": "number", "minimum": 0 },
+        "isDefault": { "type": "boolean", "default": false },
+        "isActive": { "type": "boolean", "default": true }
+      },
+      "required": ["productId", "variantCode", "variantName", "variantType", "variantValue"]
+    },
+    "bulkOperation": {
+      "type": "object",
+      "properties": {
+        "operation": { "type": "string", "enum": ["create", "update", "delete", "activate", "deactivate"] },
+        "products": { "type": "array", "items": { "$ref": "#/inputs/createProduct" } },
+        "categories": { "type": "array", "items": { "$ref": "#/inputs/createCategory" } },
+        "variants": { "type": "array", "items": { "$ref": "#/inputs/createVariant" } }
+      },
+      "required": ["operation"]
+    },
+    "searchProducts": {
+      "type": "object",
+      "properties": {
+        "query": { "type": "string" },
+        "categoryId": { "type": "string", "format": "uuid" },
+        "supplierId": { "type": "string", "format": "uuid" },
+        "brand": { "type": "string" },
+        "priceRange": {
+          "type": "object",
+          "properties": {
+            "min": { "type": "number", "minimum": 0 },
+            "max": { "type": "number", "minimum": 0 }
+          }
+        },
+        "isActive": { "type": "boolean" },
+        "limit": { "type": "integer", "minimum": 1, "maximum": 100, "default": 20 },
+        "offset": { "type": "integer", "minimum": 0, "default": 0 }
+      }
+    },
+    "convertCurrency": {
+      "type": "object",
+      "properties": {
+        "amount": { "type": "number", "minimum": 0 },
+        "fromCurrency": { "type": "string", "enum": ["NGN", "USD", "GBP"] },
+        "toCurrency": { "type": "string", "enum": ["NGN", "USD", "GBP"] }
+      },
+      "required": ["amount", "fromCurrency", "toCurrency"]
+    },
+    "calculateVAT": {
+      "type": "object",
+      "properties": {
+        "productId": { "type": "string", "format": "uuid" },
+        "amount": { "type": "number", "minimum": 0 },
+        "region": { "type": "string", "default": "Nigeria" }
+      },
+      "required": ["amount"]
+    }
+  },
+  "outputs": {
+    "createProduct": {
+      "type": "object",
+      "properties": {
+        "success": { "type": "boolean" },
+        "product": {
+          "type": "object",
+          "properties": {
+            "id": { "type": "string", "format": "uuid" },
+            "productCode": { "type": "string" },
+            "productName": { "type": "string" },
+            "sku": { "type": "string" },
+            "barcode": { "type": "string" },
+            "costPrice": { "type": "number" },
+            "sellingPrice": { "type": "number" },
+            "currency": { "type": "string" },
+            "createdAt": { "type": "string", "format": "date-time" },
+            "updatedAt": { "type": "string", "format": "date-time" }
+          }
+        },
+        "message": { "type": "string" },
+        "error": { "type": "string" }
+      }
+    },
+    "searchProducts": {
+      "type": "object",
+      "properties": {
+        "success": { "type": "boolean" },
+        "products": {
+          "type": "array",
+          "items": { "$ref": "#/outputs/createProduct/properties/product" }
+        },
+        "pagination": {
+          "type": "object",
+          "properties": {
+            "total": { "type": "integer" },
+            "limit": { "type": "integer" },
+            "offset": { "type": "integer" },
+            "hasMore": { "type": "boolean" }
+          }
+        },
+        "message": { "type": "string" },
+        "error": { "type": "string" }
+      }
+    },
+    "bulkOperation": {
+      "type": "object",
+      "properties": {
+        "success": { "type": "boolean" },
+        "processed": { "type": "integer" },
+        "failed": { "type": "integer" },
+        "results": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": { "type": "string" },
+              "success": { "type": "boolean" },
+              "error": { "type": "string" }
+            }
+          }
+        },
+        "message": { "type": "string" },
+        "error": { "type": "string" }
+      }
+    },
+    "convertCurrency": {
+      "type": "object",
+      "properties": {
+        "success": { "type": "boolean" },
+        "originalAmount": { "type": "number" },
+        "convertedAmount": { "type": "number" },
+        "exchangeRate": { "type": "number" },
+        "fromCurrency": { "type": "string" },
+        "toCurrency": { "type": "string" },
+        "conversionDate": { "type": "string", "format": "date-time" },
+        "message": { "type": "string" },
+        "error": { "type": "string" }
+      }
+    },
+    "calculateVAT": {
+      "type": "object",
+      "properties": {
+        "success": { "type": "boolean" },
+        "subtotal": { "type": "number" },
+        "vatAmount": { "type": "number" },
+        "vatRate": { "type": "number" },
+        "total": { "type": "number" },
+        "breakdown": {
+          "type": "object",
+          "properties": {
+            "standardVAT": { "type": "number" },
+            "exemptions": { "type": "number" },
+            "additionalTaxes": { "type": "number" }
+          }
+        },
+        "message": { "type": "string" },
+        "error": { "type": "string" }
+      }
+    }
+  },
+  "actions": [
+    "createProduct",
+    "updateProduct",
+    "deleteProduct",
+    "getProduct",
+    "searchProducts",
+    "listProducts",
+    "createCategory",
+    "updateCategory",
+    "deleteCategory",
+    "getCategoryHierarchy",
+    "createVariant",
+    "updateVariant",
+    "deleteVariant",
+    "getProductVariants",
+    "bulkOperation",
+    "convertCurrency",
+    "calculateVAT",
+    "generateSKU",
+    "generateBarcode",
+    "validateProduct",
+    "getProductAnalytics",
+    "exportProducts",
+    "importProducts",
+    "syncPricing",
+    "activateProduct",
+    "deactivateProduct"
+  ],
+  "dependencies": ["inventory/TaxAndFee"],
+  "created": "2025-09-15T00:00:00Z",
+  "updated": "2025-09-15T00:00:00Z"
+}
