@@ -32,6 +32,10 @@ Preferred communication style: Simple, everyday language.
 - **PaymentGatewayCore Cell (CC-002.1)**: Enterprise Nigerian payment processing with Paystack, Flutterwave, Interswitch integration, multi-currency support, secure webhooks, HMAC verification, tenant isolation, comprehensive audit logging
 - **SplitPayment Cell (CC-002.2)**: Advanced payment splitting system with installments, layaway, multi-method payments, banker's rounding (IEEE 754), perfect financial reconciliation, production-ready with comprehensive security
 
+### Core Inventory Cells (Cross-Cutting CC-003) ✅ COMPLETE
+- **ProductCatalog Cell (CC-003.1)**: Comprehensive product management with Nigerian market features including multi-currency (NGN/USD/GBP), 7.5% VAT compliance, bulk pricing, unit conversions, supplier management, automated SKU generation, Redis caching, enterprise-grade React UI
+- **InventoryTracking Cell (CC-003.2)**: Multi-location inventory management with real-time stock tracking, automated transfers, FIFO/LIFO/weighted average valuation, stock adjustments with audit trails, low stock alerts, Nigerian business workflows (bulk operations, unit conversions)
+
 ### Legacy Admin Enhancement Cells  
 - **TenantDetails Cell**: Comprehensive tenant detail management with real-time analytics
 - **TenantFeatureToggle Cell**: Professional feature toggle management with persistence
