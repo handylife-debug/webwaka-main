@@ -8,6 +8,8 @@ import { rootDomain } from '@/lib/utils';
 import { TenantDataTable } from '@/components/admin/tenant-data-table';
 import { TenantManagementClient } from './tenant-management-client';
 
+export const dynamic = 'force-dynamic';
+
 export const metadata: Metadata = {
   title: `Tenant Management | ${rootDomain}`,
   description: `Comprehensive tenant management for ${rootDomain}`

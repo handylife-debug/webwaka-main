@@ -17,7 +17,7 @@ export async function getAllAdminUsers(): Promise<AdminUser[]> {
       return [];
     }
 
-    const values = await redis.mget<AdminUser[]>(...keys);
+    const values = await redis.mget<AdminUser>(...keys);
 
     return keys.map((key, index) => {
       const userId = key.replace('admin_user:', '');
@@ -121,7 +121,7 @@ export async function getActivityLog(limit: number = 50, offset: number = 0): Pr
       return [];
     }
 
-    const activities = await redis.mget<ActivityLog[]>(...activityIds.map((id: string) => `activity:${id}`));
+    const activities = await redis.mget<ActivityLog>(...activityIds.map((id: string) => `activity:${id}`));
     
     return activities.filter(Boolean) as ActivityLog[];
   } catch (error) {

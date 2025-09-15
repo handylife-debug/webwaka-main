@@ -57,7 +57,7 @@ async function testTransactionConsistency() {
       const mockGetUplinePartners = async (client: any, sourcePartnerId: string, tenantId: string) => {
         // This now uses client.query instead of execute_sql
         const result = await client.query('SELECT $1 as test_source_id, $2 as test_tenant_id', [sourcePartnerId, tenantId]);
-        return result.rows.map(row => ({
+        return result.rows.map((row: any) => ({
           partner_id: `upline-${row.test_source_id}`,
           commission_rate: 0.1,
           levels_from_source: 1
@@ -81,7 +81,7 @@ async function testTransactionConsistency() {
     return true;
 
   } catch (error) {
-    console.log('  ❌ Transaction consistency test failed:', error.message);
+    console.log('  ❌ Transaction consistency test failed:', error instanceof Error ? error.message : error);
     return false;
   }
 }

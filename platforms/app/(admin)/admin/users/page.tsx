@@ -11,6 +11,8 @@ import { UserManagementClient } from './user-management-client';
 
 const rootDomain = process.env.NEXT_PUBLIC_ROOT_DOMAIN || 'localhost:5000';
 
+export const dynamic = 'force-dynamic';
+
 export const metadata: Metadata = {
   title: `User Management | ${rootDomain}`,
   description: `Manage administrative users and view activity logs for ${rootDomain}`

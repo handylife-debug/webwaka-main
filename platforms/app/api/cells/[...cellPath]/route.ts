@@ -5,10 +5,10 @@ import { cellBus } from '../../../../cell-sdk/loader/cell-bus';
 // Route: /api/cells/[sector]/[name]/actions/[action]
 export async function POST(
   request: NextRequest,
-  { params }: { params: { cellPath: string[] } }
+  { params }: { params: Promise<{ cellPath: string[] }> }
 ) {
   try {
-    const { cellPath } = params;
+    const { cellPath } = await params;
     
     // Parse the cell path: [sector, name, 'actions', action]
     if (!cellPath || cellPath.length < 4 || cellPath[2] !== 'actions') {
@@ -71,10 +71,10 @@ export async function POST(
 // Handle GET requests for Cell metadata/health
 export async function GET(
   request: NextRequest,
-  { params }: { params: { cellPath: string[] } }
+  { params }: { params: Promise<{ cellPath: string[] }> }
 ) {
   try {
-    const { cellPath } = params;
+    const { cellPath } = await params;
     
     if (!cellPath || cellPath.length < 2) {
       return NextResponse.json(

@@ -36,8 +36,7 @@ export async function getSubdomainData(subdomain: string): Promise<SubdomainData
   
   return await safeRedisOperation(
     async () => {
-      const data = await redis.get<SubdomainData>(`subdomain:${sanitizedSubdomain}`);
-      return data ?? null;
+      return await redis.get<SubdomainData>(`subdomain:${sanitizedSubdomain}`);
     },
     null
   );
