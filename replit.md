@@ -36,6 +36,10 @@ Preferred communication style: Simple, everyday language.
 - **ProductCatalog Cell (CC-003.1)**: Comprehensive product management with Nigerian market features including multi-currency (NGN/USD/GBP), 7.5% VAT compliance, bulk pricing, unit conversions, supplier management, automated SKU generation, Redis caching, enterprise-grade React UI
 - **InventoryTracking Cell (CC-003.2)**: Multi-location inventory management with real-time stock tracking, automated transfers, FIFO/LIFO/weighted average valuation, stock adjustments with audit trails, low stock alerts, Nigerian business workflows (bulk operations, unit conversions)
 
+### Core Customer/CRM Cells (Cross-Cutting CC-004) ✅ COMPLETE
+- **CustomerProfile Cell (CC-004.1)**: Comprehensive customer data management with Nigerian phone validation, multi-language support (English, Hausa, Yoruba, Igbo), SMS/WhatsApp integration, state/LGA geographic support, mobile-first design, contact/address management, demographics tracking
+- **CustomerEngagement Cell (CC-004.2)**: Advanced loyalty programs with points/tier systems, purchase behavior analytics, Nigerian market insights (cash vs digital tracking, family loyalty programs), engagement scoring, retention campaigns, seasonal marketing for Nigerian holidays, recharts-powered analytics dashboard
+
 ### Legacy Admin Enhancement Cells  
 - **TenantDetails Cell**: Comprehensive tenant detail management with real-time analytics
 - **TenantFeatureToggle Cell**: Professional feature toggle management with persistence
