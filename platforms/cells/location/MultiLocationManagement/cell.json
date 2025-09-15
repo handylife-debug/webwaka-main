@@ -1,0 +1,71 @@
+{
+  "id": "multi-location-management",
+  "name": "Multi-Location Management Cell",
+  "version": "1.0.0",
+  "description": "Centralized management of multiple store locations with real-time inventory transfers, stock level monitoring, and cross-location analytics",
+  "category": "location",
+  "type": "interactive",
+  "inputs": {
+    "tenantId": {
+      "type": "string",
+      "required": true,
+      "description": "Tenant identifier for multi-tenant location isolation"
+    },
+    "locationId": {
+      "type": "string", 
+      "required": false,
+      "description": "Specific location filter for focused management"
+    },
+    "operationType": {
+      "type": "string",
+      "required": false,
+      "description": "Operation mode: overview, transfers, audits, analytics",
+      "default": "overview"
+    }
+  },
+  "outputs": {
+    "locationOverview": {
+      "type": "object",
+      "description": "Comprehensive overview of all locations with key metrics"
+    },
+    "inventoryDistribution": {
+      "type": "array",
+      "description": "Real-time inventory levels across all locations"
+    },
+    "transferRequests": {
+      "type": "array", 
+      "description": "Active and pending inventory transfer requests"
+    },
+    "locationPerformance": {
+      "type": "object",
+      "description": "Performance analytics and comparison across locations"
+    }
+  },
+  "actions": {
+    "createLocation": "Add new store location with initial configuration",
+    "updateLocationSettings": "Modify location details, manager, and operational settings",
+    "initiateInventoryTransfer": "Create inventory transfer between locations",
+    "approveTransferRequest": "Approve or reject pending transfer requests",
+    "conductStockAudit": "Initiate multi-location stock audit operations",
+    "analyzeLocationPerformance": "Generate performance reports and analytics",
+    "optimizeInventoryDistribution": "AI-powered inventory optimization recommendations",
+    "exportLocationReports": "Download comprehensive location management reports"
+  },
+  "dependencies": {
+    "database": ["locations", "stock_levels", "stock_movements", "stock_audits"],
+    "services": ["inventory-transfer", "location-analytics", "audit-management"],
+    "ui": ["shadcn/ui", "lucide-react", "recharts", "react-map-gl"]
+  },
+  "features": {
+    "multiLocationSupport": true,
+    "realTimeInventorySync": true,
+    "inventoryTransfers": true,
+    "crossLocationAnalytics": true,
+    "centralizedManagement": true,
+    "auditTrail": true,
+    "performanceTracking": true,
+    "automatedRebalancing": true,
+    "locationMapping": true,
+    "managerPermissions": true
+  }
+}
