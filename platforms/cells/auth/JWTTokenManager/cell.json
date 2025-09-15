@@ -1,0 +1,288 @@
+{
+  "name": "JWTTokenManager",
+  "version": "1.0.0",
+  "description": "Enterprise JWT token management Cell with secure generation, validation, refresh, and lifecycle management",
+  "type": "cross-cutting",
+  "category": "authentication",
+  "tags": ["jwt", "tokens", "security", "authentication", "refresh"],
+  "author": "WebWaka",
+  "license": "MIT",
+  "dependencies": {
+    "cells": [],
+    "external": [
+      "jsonwebtoken",
+      "crypto"
+    ]
+  },
+  "inputs": {
+    "generateTokens": {
+      "type": "object",
+      "properties": {
+        "payload": {
+          "type": "object",
+          "properties": {
+            "userId": { "type": "string" },
+            "email": { "type": "string" },
+            "roles": { 
+              "type": "array", 
+              "items": { "type": "string" },
+              "optional": true 
+            },
+            "tenantId": { "type": "string", "optional": true },
+            "permissions": { 
+              "type": "array", 
+              "items": { "type": "string" },
+              "optional": true 
+            }
+          },
+          "required": ["userId", "email"]
+        },
+        "options": {
+          "type": "object",
+          "properties": {
+            "accessTokenExpiry": { "type": "string", "optional": true, "default": "15m" },
+            "refreshTokenExpiry": { "type": "string", "optional": true, "default": "30d" },
+            "audience": { "type": "string", "optional": true },
+            "issuer": { "type": "string", "optional": true }
+          },
+          "optional": true
+        }
+      },
+      "required": ["payload"]
+    },
+    "validateToken": {
+      "type": "object",
+      "properties": {
+        "token": { "type": "string" },
+        "tokenType": { 
+          "type": "string", 
+          "enum": ["access", "refresh"], 
+          "default": "access" 
+        },
+        "options": {
+          "type": "object",
+          "properties": {
+            "audience": { "type": "string", "optional": true },
+            "issuer": { "type": "string", "optional": true },
+            "ignoreExpiration": { "type": "boolean", "optional": true, "default": false }
+          },
+          "optional": true
+        }
+      },
+      "required": ["token"]
+    },
+    "refreshTokens": {
+      "type": "object",
+      "properties": {
+        "refreshToken": { "type": "string" },
+        "options": {
+          "type": "object",
+          "properties": {
+            "accessTokenExpiry": { "type": "string", "optional": true, "default": "15m" },
+            "newRefreshToken": { "type": "boolean", "optional": true, "default": true }
+          },
+          "optional": true
+        }
+      },
+      "required": ["refreshToken"]
+    },
+    "revokeToken": {
+      "type": "object",
+      "properties": {
+        "token": { "type": "string" },
+        "tokenType": { 
+          "type": "string", 
+          "enum": ["access", "refresh", "all"], 
+          "default": "access" 
+        },
+        "userId": { "type": "string", "optional": true }
+      },
+      "required": ["token"]
+    },
+    "getTokenInfo": {
+      "type": "object",
+      "properties": {
+        "token": { "type": "string" },
+        "includePayload": { "type": "boolean", "optional": true, "default": false }
+      },
+      "required": ["token"]
+    },
+    "validateTokenFamily": {
+      "type": "object",
+      "properties": {
+        "refreshToken": { "type": "string" },
+        "userId": { "type": "string" }
+      },
+      "required": ["refreshToken", "userId"]
+    }
+  },
+  "outputs": {
+    "generateTokens": {
+      "type": "object",
+      "properties": {
+        "success": { "type": "boolean" },
+        "message": { "type": "string" },
+        "data": {
+          "type": "object",
+          "properties": {
+            "accessToken": { "type": "string" },
+            "refreshToken": { "type": "string" },
+            "accessTokenExpiry": { "type": "string" },
+            "refreshTokenExpiry": { "type": "string" },
+            "tokenType": { "type": "string", "default": "Bearer" }
+          }
+        }
+      }
+    },
+    "validateToken": {
+      "type": "object",
+      "properties": {
+        "success": { "type": "boolean" },
+        "message": { "type": "string" },
+        "data": {
+          "type": "object",
+          "properties": {
+            "valid": { "type": "boolean" },
+            "payload": {
+              "type": "object",
+              "properties": {
+                "userId": { "type": "string" },
+                "email": { "type": "string" },
+                "roles": { "type": "array", "items": { "type": "string" } },
+                "tenantId": { "type": "string", "optional": true },
+                "permissions": { "type": "array", "items": { "type": "string" } },
+                "iat": { "type": "number" },
+                "exp": { "type": "number" },
+                "aud": { "type": "string", "optional": true },
+                "iss": { "type": "string", "optional": true }
+              }
+            },
+            "expired": { "type": "boolean" },
+            "expiresAt": { "type": "string" }
+          }
+        }
+      }
+    },
+    "refreshTokens": {
+      "type": "object",
+      "properties": {
+        "success": { "type": "boolean" },
+        "message": { "type": "string" },
+        "data": {
+          "type": "object",
+          "properties": {
+            "accessToken": { "type": "string" },
+            "refreshToken": { "type": "string", "optional": true },
+            "accessTokenExpiry": { "type": "string" },
+            "refreshTokenExpiry": { "type": "string", "optional": true }
+          }
+        }
+      }
+    },
+    "revokeToken": {
+      "type": "object",
+      "properties": {
+        "success": { "type": "boolean" },
+        "message": { "type": "string" },
+        "data": {
+          "type": "object",
+          "properties": {
+            "revoked": { "type": "boolean" },
+            "tokenType": { "type": "string" },
+            "revokedAt": { "type": "string" }
+          }
+        }
+      }
+    },
+    "getTokenInfo": {
+      "type": "object",
+      "properties": {
+        "success": { "type": "boolean" },
+        "message": { "type": "string" },
+        "data": {
+          "type": "object",
+          "properties": {
+            "tokenType": { "type": "string" },
+            "issuedAt": { "type": "string" },
+            "expiresAt": { "type": "string" },
+            "expired": { "type": "boolean" },
+            "audience": { "type": "string", "optional": true },
+            "issuer": { "type": "string", "optional": true },
+            "payload": {
+              "type": "object",
+              "optional": true,
+              "properties": {
+                "userId": { "type": "string" },
+                "email": { "type": "string" },
+                "roles": { "type": "array", "items": { "type": "string" } }
+              }
+            }
+          }
+        }
+      }
+    },
+    "validateTokenFamily": {
+      "type": "object",
+      "properties": {
+        "success": { "type": "boolean" },
+        "message": { "type": "string" },
+        "data": {
+          "type": "object",
+          "properties": {
+            "valid": { "type": "boolean" },
+            "familyId": { "type": "string" },
+            "generationCount": { "type": "number" },
+            "lastRefresh": { "type": "string" }
+          }
+        }
+      }
+    }
+  },
+  "configuration": {
+    "secrets": {
+      "accessTokenSecret": {
+        "type": "env",
+        "variable": "JWT_ACCESS_SECRET",
+        "required": true,
+        "description": "Secret key for signing access tokens"
+      },
+      "refreshTokenSecret": {
+        "type": "env",
+        "variable": "JWT_REFRESH_SECRET", 
+        "required": true,
+        "description": "Secret key for signing refresh tokens"
+      }
+    },
+    "defaults": {
+      "accessTokenExpiry": "15m",
+      "refreshTokenExpiry": "30d",
+      "algorithm": "HS256",
+      "issuer": "webwaka-platform",
+      "audience": "webwaka-clients"
+    },
+    "security": {
+      "tokenRotation": true,
+      "refreshTokenFamily": true,
+      "revokedTokenStorage": true,
+      "secretRotation": false
+    }
+  },
+  "security": {
+    "encryption": {
+      "refreshTokens": "bcrypt",
+      "revokedTokens": "Redis-TTL"
+    },
+    "validation": {
+      "tokenFamily": true,
+      "audience": true,
+      "issuer": true,
+      "notBefore": true
+    },
+    "policies": {
+      "maxRefreshCount": 50,
+      "refreshTokenReuse": "revoke-family",
+      "accessTokenLifetime": "15m",
+      "refreshTokenLifetime": "30d"
+    }
+  }
+}
