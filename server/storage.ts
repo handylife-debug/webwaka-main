@@ -50,6 +50,19 @@ import {
   SPLIT_PAYMENT_TRIGGERS_SQL
 } from '../shared/schema';
 
+// Import Customer/CRM schema from platforms/lib/schema.ts  
+import {
+  ALL_CRM_TABLES_SQL,
+  CUSTOMERS_TABLE_SQL,
+  CUSTOMER_CONTACTS_TABLE_SQL,
+  CUSTOMER_INTERACTIONS_TABLE_SQL,
+  CUSTOMER_SEGMENTS_TABLE_SQL,
+  CUSTOMER_SEGMENT_MEMBERSHIPS_TABLE_SQL,
+  CUSTOMER_ADDRESSES_TABLE_SQL,
+  CUSTOMER_NOTES_TABLE_SQL,
+  CUSTOMER_DOCUMENTS_TABLE_SQL
+} from '../platforms/lib/schema';
+
 // Import the database connection utility
 import { execute_sql, withTransaction } from '../platforms/lib/database';
 
@@ -759,7 +772,104 @@ export async function initializeSplitPaymentSchema(): Promise<void> {
 }
 
 /**
- * Complete system initialization - Partner, Inventory, and SplitPayment Management
+ * Initialize Customer/CRM Management database schema
+ * This function ensures the complete Customer/CRM schema is set up with proper:
+ * - Multi-tenant isolation
+ * - Data integrity constraints  
+ * - Foreign key relationships
+ * - Performance indexes
+ * - Automatic timestamp updates
+ */
+export async function initializeCustomerManagementSchema(): Promise<void> {
+  try {
+    console.log('Initializing Customer/CRM Management database schema...');
+
+    await withTransaction(async (client) => {
+      // Ensure required extensions are available
+      await client.query(`CREATE EXTENSION IF NOT EXISTS pgcrypto;`);
+      await client.query(`CREATE EXTENSION IF NOT EXISTS plpgsql;`);
+      
+      // Step 1: Create all customer/CRM tables with constraints
+      console.log('Creating Customer/CRM Management tables...');
+      await client.query(CUSTOMERS_TABLE_SQL);
+      await client.query(CUSTOMER_CONTACTS_TABLE_SQL);
+      await client.query(CUSTOMER_INTERACTIONS_TABLE_SQL);
+      await client.query(CUSTOMER_SEGMENTS_TABLE_SQL);
+      await client.query(CUSTOMER_SEGMENT_MEMBERSHIPS_TABLE_SQL);
+      await client.query(CUSTOMER_ADDRESSES_TABLE_SQL);
+      await client.query(CUSTOMER_NOTES_TABLE_SQL);
+      await client.query(CUSTOMER_DOCUMENTS_TABLE_SQL);
+      
+      // Step 2: Create updated_at trigger function (if not exists)
+      console.log('Setting up Customer/CRM automatic timestamp triggers...');
+      await client.query(UPDATED_AT_TRIGGER_FUNCTION_SQL);
+      
+      // Step 3: Create triggers for all customer tables
+      const customerTables = [
+        'customers', 'customer_contacts', 'customer_interactions', 
+        'customer_segments', 'customer_segment_memberships', 
+        'customer_addresses', 'customer_notes', 'customer_documents'
+      ];
+      
+      for (const table of customerTables) {
+        await client.query(`
+          DROP TRIGGER IF EXISTS trigger_update_${table}_updated_at ON ${table};
+          CREATE TRIGGER trigger_update_${table}_updated_at
+            BEFORE UPDATE ON ${table}
+            FOR EACH ROW
+            EXECUTE FUNCTION update_updated_at_column();
+        `);
+      }
+
+      // Step 4: Create performance indexes
+      console.log('Creating indexes for optimal CRM query performance...');
+      await client.query(`
+        -- Customer indexes
+        CREATE INDEX IF NOT EXISTS idx_customers_tenant_id ON customers(tenant_id);
+        CREATE INDEX IF NOT EXISTS idx_customers_customer_code ON customers(tenant_id, customer_code);
+        CREATE INDEX IF NOT EXISTS idx_customers_company_name ON customers(tenant_id, company_name);
+        CREATE INDEX IF NOT EXISTS idx_customers_type_status ON customers(tenant_id, customer_type, customer_status);
+        CREATE INDEX IF NOT EXISTS idx_customers_assigned_sales_rep ON customers(assigned_sales_rep_id);
+        
+        -- Customer contacts indexes  
+        CREATE INDEX IF NOT EXISTS idx_customer_contacts_tenant_id ON customer_contacts(tenant_id);
+        CREATE INDEX IF NOT EXISTS idx_customer_contacts_customer_id ON customer_contacts(customer_id);
+        CREATE INDEX IF NOT EXISTS idx_customer_contacts_email ON customer_contacts(email);
+        CREATE INDEX IF NOT EXISTS idx_customer_contacts_type ON customer_contacts(contact_type);
+        
+        -- Customer interactions indexes
+        CREATE INDEX IF NOT EXISTS idx_customer_interactions_tenant_id ON customer_interactions(tenant_id);
+        CREATE INDEX IF NOT EXISTS idx_customer_interactions_customer_id ON customer_interactions(customer_id);
+        CREATE INDEX IF NOT EXISTS idx_customer_interactions_contact_id ON customer_interactions(contact_id);
+        CREATE INDEX IF NOT EXISTS idx_customer_interactions_date ON customer_interactions(interaction_date);
+        CREATE INDEX IF NOT EXISTS idx_customer_interactions_conducted_by ON customer_interactions(conducted_by);
+        
+        -- Customer segments indexes
+        CREATE INDEX IF NOT EXISTS idx_customer_segments_tenant_id ON customer_segments(tenant_id);
+        CREATE INDEX IF NOT EXISTS idx_customer_segments_type ON customer_segments(segment_type);
+        
+        -- Other customer table indexes
+        CREATE INDEX IF NOT EXISTS idx_customer_addresses_tenant_id ON customer_addresses(tenant_id);
+        CREATE INDEX IF NOT EXISTS idx_customer_addresses_customer_id ON customer_addresses(customer_id);
+        CREATE INDEX IF NOT EXISTS idx_customer_notes_tenant_id ON customer_notes(tenant_id);
+        CREATE INDEX IF NOT EXISTS idx_customer_notes_customer_id ON customer_notes(customer_id);
+        CREATE INDEX IF NOT EXISTS idx_customer_documents_tenant_id ON customer_documents(tenant_id);
+        CREATE INDEX IF NOT EXISTS idx_customer_documents_customer_id ON customer_documents(customer_id);
+      `);
+    });
+    
+    console.log('✅ Customer/CRM Management database schema initialized successfully');
+    console.log('✅ All customer tables, indexes, constraints, and triggers created');
+    console.log('✅ Multi-tenant isolation and data integrity enforced');
+    
+  } catch (error) {
+    console.error('❌ Error initializing Customer/CRM Management schema:', error);
+    throw error;
+  }
+}
+
+/**
+ * Complete system initialization - Partner, Inventory, Customer/CRM, and SplitPayment Management
  * This sets up the entire POS system with all features
  */
 export async function initializeCompleteSystemSchema(): Promise<void> {
@@ -769,6 +879,9 @@ export async function initializeCompleteSystemSchema(): Promise<void> {
     // Initialize Partner Management first
     await initializePartnerManagementSchema();
     
+    // Initialize Customer/CRM Management
+    await initializeCustomerManagementSchema();
+    
     // Then initialize Inventory Management
     await initializeInventoryManagementSchema();
     
@@ -776,7 +889,7 @@ export async function initializeCompleteSystemSchema(): Promise<void> {
     await initializeSplitPaymentSchema();
     
     console.log('✅ Complete POS System Schema initialized successfully');
-    console.log('✅ Partner Management, Inventory Management, and SplitPayment are ready');
+    console.log('✅ Partner, Customer/CRM, Inventory, and SplitPayment Management are ready');
     
   } catch (error) {
     console.error('❌ Error initializing Complete System schema:', error);
