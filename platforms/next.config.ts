@@ -198,13 +198,7 @@ const nextConfig: NextConfig = {
   experimental: {
     // Enable experimental features if needed
   },
-  // Configure for Replit environment - allow all dev origins
-  allowedDevOrigins: [
-    'http://localhost:5000',
-    'http://127.0.0.1:5000', 
-    'https://*.replit.dev',
-    'http://*.replit.dev'
-  ],
+  // Replit environment configuration handled via middleware
   // Ensure proper handling of Vercel Analytics and Speed Insights
   headers: async () => {
     return [

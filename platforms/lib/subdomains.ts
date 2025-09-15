@@ -36,8 +36,8 @@ export async function getSubdomainData(subdomain: string) {
   
   return await safeRedisOperation(
     async () => {
-      if (!redis) return null;
-      return await redis.get<SubdomainData>(`subdomain:${sanitizedSubdomain}`);
+      const data = await redis.get<SubdomainData>(`subdomain:${sanitizedSubdomain}`);
+      return data ?? null;
     },
     null
   );
@@ -46,17 +46,17 @@ export async function getSubdomainData(subdomain: string) {
 export async function getAllSubdomains() {
   return await safeRedisOperation(
     async () => {
-      if (!redis) return [];
-      
-      const keys = await redis.keys('subdomain:*');
+      const keys = await redis.list('subdomain:');
 
       if (!keys.length) {
         return [];
       }
 
-      const values = await redis.mget<SubdomainData[]>(...keys);
+      const values = await Promise.all(
+        keys.map(key => redis.get<SubdomainData>(key))
+      );
 
-      return keys.map((key, index) => {
+      return keys.map((key: string, index: number) => {
         const subdomain = key.replace('subdomain:', '');
         const data = values[index];
 

@@ -11,6 +11,7 @@
   "license": "ISC",
   "dependencies": {
     "@octokit/rest": "^21.1.1",
+    "@replit/database": "^3.0.1",
     "@types/bcrypt": "^6.0.0",
     "@types/pg": "^8.15.5",
     "bcrypt": "^6.0.0",
