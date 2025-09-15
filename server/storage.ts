@@ -35,7 +35,19 @@ import {
   STOCK_AUDITS_TABLE_SQL,
   PRODUCT_SERIAL_NUMBERS_TABLE_SQL,
   LOW_STOCK_ALERTS_TABLE_SQL,
-  VERIFY_INVENTORY_BUSINESS_LOGIC_FUNCTION_SQL
+  VERIFY_INVENTORY_BUSINESS_LOGIC_FUNCTION_SQL,
+  // Split Payment System Schema
+  SPLIT_PAYMENTS_TABLE_SQL,
+  SPLIT_PAYMENT_RECIPIENTS_TABLE_SQL,
+  INSTALLMENT_PLANS_TABLE_SQL,
+  INSTALLMENT_SCHEDULES_TABLE_SQL,
+  LAYAWAY_ORDERS_TABLE_SQL,
+  LAYAWAY_PAYMENTS_TABLE_SQL,
+  MULTI_METHOD_PAYMENTS_TABLE_SQL,
+  MULTI_METHOD_PAYMENT_DETAILS_TABLE_SQL,
+  PAYMENT_AUDIT_LOGS_TABLE_SQL,
+  SPLIT_PAYMENTS_INDEXES_SQL,
+  SPLIT_PAYMENT_TRIGGERS_SQL
 } from '../shared/schema';
 
 // Import the database connection utility
@@ -378,6 +390,54 @@ export async function initializeProductCategoriesTable(): Promise<void> {
 }
 
 /**
+ * Initialize Split Payment System database schema
+ * Creates all tables, indexes, constraints, and triggers for enterprise-grade split payments,
+ * installment plans, layaway orders, and multi-method payments with proper financial precision
+ */
+export async function initializeSplitPaymentSchema(): Promise<void> {
+  try {
+    console.log('Initializing Split Payment System database schema...');
+
+    await withTransaction(async (client) => {
+      // Ensure required extensions are available
+      await client.query(`CREATE EXTENSION IF NOT EXISTS pgcrypto;`);
+      await client.query(`CREATE EXTENSION IF NOT EXISTS plpgsql;`);
+      
+      // Step 1: Create all split payment tables with constraints
+      console.log('Creating Split Payment System tables...');
+      await client.query(SPLIT_PAYMENTS_TABLE_SQL);
+      await client.query(SPLIT_PAYMENT_RECIPIENTS_TABLE_SQL);
+      await client.query(INSTALLMENT_PLANS_TABLE_SQL);
+      await client.query(INSTALLMENT_SCHEDULES_TABLE_SQL);
+      await client.query(LAYAWAY_ORDERS_TABLE_SQL);
+      await client.query(LAYAWAY_PAYMENTS_TABLE_SQL);
+      await client.query(MULTI_METHOD_PAYMENTS_TABLE_SQL);
+      await client.query(MULTI_METHOD_PAYMENT_DETAILS_TABLE_SQL);
+      await client.query(PAYMENT_AUDIT_LOGS_TABLE_SQL);
+      
+      // Step 2: Create performance indexes
+      console.log('Creating indexes for optimal split payment query performance...');
+      await client.query(SPLIT_PAYMENTS_INDEXES_SQL);
+      
+      // Step 3: Create trigger functions and triggers
+      console.log('Setting up split payment management triggers...');
+      await client.query(UPDATED_AT_TRIGGER_FUNCTION_SQL);
+      await client.query(SPLIT_PAYMENT_TRIGGERS_SQL);
+    });
+    
+    console.log('\\n✅ Split Payment System database schema initialized successfully');
+    console.log('✅ All split payment tables, indexes, constraints, and triggers created');
+    console.log('✅ Multi-tenant isolation and financial data integrity enforced');
+    console.log('✅ Enterprise-grade split payments, installments, and layaway ready for production');
+    console.log('✅ Banker's rounding precision and perfect reconciliation enabled');
+    
+  } catch (error) {
+    console.error('❌ Error initializing Split Payment System schema:', error);
+    throw error;
+  }
+}
+
+/**
  * Initialize only the Suppliers table
  */
 export async function initializeSuppliersTable(): Promise<void> {
@@ -656,7 +716,50 @@ export async function verifyInventoryBusinessLogic(): Promise<{
 }
 
 /**
- * Complete system initialization - both Partner and Inventory Management
+ * Initialize SplitPayment schema - tables for split payments, installments, layaway
+ */
+export async function initializeSplitPaymentSchema(): Promise<void> {
+  try {
+    console.log('Initializing SplitPayment database schema...');
+
+    await withTransaction(async (client) => {
+      // Ensure required extensions are available
+      await client.query(`CREATE EXTENSION IF NOT EXISTS pgcrypto;`);
+      
+      // Step 1: Create SplitPayment tables
+      console.log('Creating SplitPayment tables...');
+      await client.query(SPLIT_PAYMENTS_TABLE_SQL);
+      await client.query(SPLIT_PAYMENT_RECIPIENTS_TABLE_SQL);
+      await client.query(INSTALLMENT_PLANS_TABLE_SQL);
+      await client.query(INSTALLMENT_SCHEDULES_TABLE_SQL);
+      await client.query(LAYAWAY_ORDERS_TABLE_SQL);
+      await client.query(LAYAWAY_PAYMENTS_TABLE_SQL);
+      await client.query(MULTI_METHOD_PAYMENTS_TABLE_SQL);
+      await client.query(MULTI_METHOD_PAYMENT_DETAILS_TABLE_SQL);
+      await client.query(PAYMENT_AUDIT_LOGS_TABLE_SQL);
+      
+      // Step 2: Create performance indexes
+      console.log('Creating SplitPayment indexes...');
+      await client.query(SPLIT_PAYMENTS_INDEXES_SQL);
+      
+      // Step 3: Create trigger functions and triggers
+      console.log('Setting up SplitPayment triggers...');
+      await client.query(UPDATED_AT_TRIGGER_FUNCTION_SQL);
+      await client.query(SPLIT_PAYMENT_TRIGGERS_SQL);
+    });
+    
+    console.log('✅ SplitPayment database schema initialized successfully');
+    console.log('✅ All split payment, installment, and layaway tables created');
+    console.log('✅ Multi-tenant isolation and data integrity enforced');
+    
+  } catch (error) {
+    console.error('❌ Error initializing SplitPayment schema:', error);
+    throw error;
+  }
+}
+
+/**
+ * Complete system initialization - Partner, Inventory, and SplitPayment Management
  * This sets up the entire POS system with all features
  */
 export async function initializeCompleteSystemSchema(): Promise<void> {
@@ -669,8 +772,11 @@ export async function initializeCompleteSystemSchema(): Promise<void> {
     // Then initialize Inventory Management
     await initializeInventoryManagementSchema();
     
+    // Finally initialize SplitPayment System
+    await initializeSplitPaymentSchema();
+    
     console.log('✅ Complete POS System Schema initialized successfully');
-    console.log('✅ Both Partner Management and Inventory Management are ready');
+    console.log('✅ Partner Management, Inventory Management, and SplitPayment are ready');
     
   } catch (error) {
     console.error('❌ Error initializing Complete System schema:', error);
