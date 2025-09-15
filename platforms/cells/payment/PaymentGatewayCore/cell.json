@@ -1,0 +1,255 @@
+{
+  "id": "PaymentGatewayCore",
+  "name": "Payment Gateway Core",
+  "description": "Enterprise payment processing Cell with Nigerian payment gateways (Paystack, Flutterwave, Interswitch) supporting local and international payments, subscriptions, refunds, and webhooks for the WebWaka Biological system",
+  "version": "1.0.0",
+  "type": "cross-cutting",
+  "category": "payment",
+  "tags": ["payment", "paystack", "flutterwave", "interswitch", "nigerian", "subscription", "enterprise", "cross-cutting", "CC-002"],
+  "dependencies": {
+    "external": [
+      "paystack",
+      "@paystack/inline-js",
+      "flutterwave-node-v3",
+      "@flutterwave/flutterwave-react-v3",
+      "zod",
+      "next",
+      "axios"
+    ],
+    "internal": [
+      "AuthenticationCore",
+      "JWTTokenManager"
+    ]
+  },
+  "environment": {
+    "required": [
+      "PAYSTACK_SECRET_KEY",
+      "NEXT_PUBLIC_PAYSTACK_PUBLIC_KEY",
+      "FLUTTERWAVE_SECRET_KEY",
+      "FLUTTERWAVE_PUBLIC_KEY",
+      "INTERSWITCH_CLIENT_ID",
+      "INTERSWITCH_CLIENT_SECRET"
+    ],
+    "optional": [
+      "PAYSTACK_WEBHOOK_SECRET",
+      "FLUTTERWAVE_WEBHOOK_SECRET",
+      "INTERSWITCH_WEBHOOK_SECRET",
+      "PAYMENT_SUCCESS_URL",
+      "PAYMENT_CANCEL_URL",
+      "INTERSWITCH_ENVIRONMENT"
+    ]
+  },
+  "features": {
+    "paystack": {
+      "oneTimePayments": true,
+      "subscriptions": true,
+      "customerManagement": true,
+      "webhooks": true,
+      "refunds": true,
+      "paymentMethods": ["card", "bank", "ussd", "mobile_money", "qr"],
+      "supportedCurrencies": ["NGN", "USD", "EUR", "GBP", "ZAR", "KES", "GHS"]
+    },
+    "flutterwave": {
+      "oneTimePayments": true,
+      "subscriptions": true,
+      "webhooks": true,
+      "refunds": true,
+      "paymentMethods": ["card", "bank", "ussd", "mobile_money", "mpesa", "rwanda_momo"],
+      "supportedCurrencies": ["NGN", "USD", "EUR", "GBP", "KES", "UGX", "ZAR", "GHS", "RWF"]
+    },
+    "interswitch": {
+      "oneTimePayments": true,
+      "subscriptions": true,
+      "webhooks": true,
+      "refunds": true,
+      "paymentMethods": ["card", "ussd", "bank_transfer", "qr_code", "verve"],
+      "supportedCurrencies": ["NGN", "USD"]
+    },
+    "shared": {
+      "multiCurrency": true,
+      "paymentHistory": true,
+      "failureHandling": true,
+      "securityValidation": true,
+      "auditLogging": true
+    }
+  },
+  "api": {
+    "endpoints": [
+      {
+        "path": "/api/cells/payment/PaymentGatewayCore",
+        "method": "POST",
+        "description": "Main payment gateway API endpoint",
+        "actions": [
+          "initializePayment",
+          "verifyPayment",
+          "createCustomer",
+          "createSubscription", 
+          "processRefund",
+          "getPaymentStatus",
+          "getCustomerPayments",
+          "validatePayment",
+          "cancelSubscription",
+          "chargeAuthorization",
+          "splitPayment"
+        ]
+      },
+      {
+        "path": "/api/webhooks/paystack",
+        "method": "POST", 
+        "description": "Paystack webhook endpoint for payment events"
+      },
+      {
+        "path": "/api/webhooks/flutterwave",
+        "method": "POST",
+        "description": "Flutterwave webhook endpoint for payment events"
+      },
+      {
+        "path": "/api/webhooks/interswitch",
+        "method": "POST",
+        "description": "Interswitch webhook endpoint for payment events"
+      }
+    ]
+  },
+  "schemas": {
+    "PaymentIntent": {
+      "type": "object",
+      "required": ["amount", "currency", "provider"],
+      "properties": {
+        "amount": {
+          "type": "number",
+          "minimum": 0.50,
+          "description": "Payment amount in the currency's smallest unit"
+        },
+        "currency": {
+          "type": "string",
+          "enum": ["NGN", "USD", "EUR", "GBP", "ZAR", "KES", "GHS", "UGX", "RWF"],
+          "default": "NGN"
+        },
+        "provider": {
+          "type": "string", 
+          "enum": ["paystack", "flutterwave", "interswitch"],
+          "description": "Nigerian payment processor to use"
+        },
+        "description": {
+          "type": "string",
+          "maxLength": 500
+        },
+        "metadata": {
+          "type": "object",
+          "description": "Additional payment metadata"
+        },
+        "customerId": {
+          "type": "string",
+          "description": "Customer ID for payment tracking"
+        }
+      }
+    },
+    "Subscription": {
+      "type": "object", 
+      "required": ["planId", "customerId", "provider"],
+      "properties": {
+        "planId": {
+          "type": "string",
+          "description": "Subscription plan identifier"
+        },
+        "customerId": {
+          "type": "string",
+          "description": "Customer ID"
+        },
+        "provider": {
+          "type": "string",
+          "enum": ["paystack", "flutterwave", "interswitch"]
+        },
+        "trialDays": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 365
+        },
+        "metadata": {
+          "type": "object"
+        }
+      }
+    },
+    "RefundRequest": {
+      "type": "object",
+      "required": ["paymentId", "provider"],
+      "properties": {
+        "paymentId": {
+          "type": "string",
+          "description": "Original payment ID to refund"
+        },
+        "provider": {
+          "type": "string",
+          "enum": ["paystack", "flutterwave", "interswitch"]
+        },
+        "amount": {
+          "type": "number",
+          "minimum": 0,
+          "description": "Partial refund amount (optional, full refund if not provided)"
+        },
+        "reason": {
+          "type": "string",
+          "enum": ["duplicate", "fraudulent", "requested_by_customer", "other"],
+          "default": "requested_by_customer"
+        }
+      }
+    },
+    "PaymentStatus": {
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "status": {
+          "type": "string",
+          "enum": ["pending", "processing", "succeeded", "failed", "canceled", "refunded"]
+        },
+        "amount": { "type": "number" },
+        "currency": { "type": "string" },
+        "provider": { "type": "string" },
+        "created": { "type": "string", "format": "date-time" },
+        "metadata": { "type": "object" }
+      }
+    }
+  },
+  "security": {
+    "authentication": "required",
+    "authorization": "role-based",
+    "webhookValidation": true,
+    "amountValidation": true,
+    "currencyValidation": true,
+    "rateLimit": {
+      "requests": 100,
+      "window": "15m"
+    }
+  },
+  "architecture": {
+    "pattern": "gateway",
+    "dataFlow": "uni-directional",
+    "errorHandling": "graceful-degradation",
+    "auditLogging": "comprehensive",
+    "caching": "payment-status-only"
+  },
+  "compliance": {
+    "pciDss": "token-based",
+    "gdpr": "data-minimal",
+    "sox": "audit-trail"
+  },
+  "monitoring": {
+    "events": [
+      "payment.created",
+      "payment.succeeded", 
+      "payment.failed",
+      "subscription.created",
+      "subscription.canceled",
+      "refund.created",
+      "webhook.received",
+      "error.occurred"
+    ],
+    "metrics": [
+      "payment_success_rate",
+      "payment_amount_total",
+      "subscription_conversion_rate",
+      "refund_rate",
+      "average_payment_time"
+    ]
+  }
+}
