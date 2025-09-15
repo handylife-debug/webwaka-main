@@ -29,6 +29,7 @@ export async function getPartnerApplicationsAction() {
     
     await logActivity({
       userId: user.id,
+      userEmail: user.email,
       action: 'VIEW_PARTNER_APPLICATIONS',
       details: `Viewed ${applications.length} partner applications`,
       ipAddress: 'system'
@@ -143,6 +144,7 @@ export async function approvePartnerApplicationAction(
     // Log the approval activity
     await logActivity({
       userId: user.id,
+      userEmail: user.email,
       action: 'APPROVE_PARTNER_APPLICATION',
       details: `Approved partner application for ${application.first_name} ${application.last_name} (${application.email})`,
       ipAddress: 'system'
@@ -211,6 +213,7 @@ export async function rejectPartnerApplicationAction(
     // Log the rejection activity
     await logActivity({
       userId: user.id,
+      userEmail: user.email,
       action: 'REJECT_PARTNER_APPLICATION',
       details: `Rejected partner application for ${application.first_name} ${application.last_name} (${application.email}). Reason: ${rejectionReason}`,
       ipAddress: 'system'
@@ -300,6 +303,7 @@ export async function bulkApproveApplicationsAction(
     // Log bulk operation
     await logActivity({
       userId: user.id,
+      userEmail: user.email,
       action: 'BULK_APPROVE_APPLICATIONS',
       details: `Bulk approved ${successCount} applications, ${errorCount} errors`,
       ipAddress: 'system'

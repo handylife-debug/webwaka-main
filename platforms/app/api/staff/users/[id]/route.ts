@@ -30,12 +30,13 @@ const userTenantUpdateSchema = z.object({
 });
 
 // GET - Get specific user details with tenant relationship
-export const GET = withStaffPermissions('staff.view')(async function(request: NextRequest, { params }: { params: { id: string } }) {
+export const GET = withStaffPermissions('staff.view')(async function(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     const { tenantId } = await getTenantContext(request);
     await validateTenantAccess(tenantId, request);
 
-    const userId = params.id;
+    const { id } = await params;
+    const userId = id;
     const { searchParams } = new URL(request.url);
     const includeHistory = searchParams.get('include_history') === 'true';
     const includeEmployee = searchParams.get('include_employee') === 'true';
@@ -121,12 +122,13 @@ export const GET = withStaffPermissions('staff.view')(async function(request: Ne
 });
 
 // PUT - Update user information or tenant relationship
-export const PUT = withStaffPermissions('staff.edit')(async function(request: NextRequest, { params }: { params: { id: string } }) {
+export const PUT = withStaffPermissions('staff.edit')(async function(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     const { tenantId } = await getTenantContext(request);
     await validateTenantAccess(tenantId, request);
 
-    const userId = params.id;
+    const { id } = await params;
+    const userId = id;
     const body = await request.json();
     
     // Check if user exists and is assigned to tenant
@@ -311,12 +313,13 @@ export const PUT = withStaffPermissions('staff.edit')(async function(request: Ne
 });
 
 // DELETE - Remove user from tenant (soft delete of relationship)
-export const DELETE = withStaffPermissions('staff.delete')(async function(request: NextRequest, { params }: { params: { id: string } }) {
+export const DELETE = withStaffPermissions('staff.delete')(async function(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     const { tenantId } = await getTenantContext(request);
     await validateTenantAccess(tenantId, request);
 
-    const userId = params.id;
+    const { id } = await params;
+    const userId = id;
     const { searchParams } = new URL(request.url);
     const permanentDelete = searchParams.get('permanent') === 'true';
     

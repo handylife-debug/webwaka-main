@@ -41,12 +41,13 @@ const approvalActionSchema = z.object({
 });
 
 // GET - Get specific attendance record with detailed information
-export const GET = withStaffPermissions('employees.attendance')(async function(request: NextRequest, { params }: { params: { id: string } }) {
+export const GET = withStaffPermissions('employees.attendance')(async function(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     const { tenantId } = await getTenantContext(request);
     await validateTenantAccess(tenantId, request);
 
-    const recordId = params.id;
+    const { id } = await params;
+    const recordId = id;
     const { searchParams } = new URL(request.url);
     const includeTimeEntries = searchParams.get('include_time_entries') === 'true';
     const includePayroll = searchParams.get('include_payroll') === 'true';
@@ -167,12 +168,13 @@ export const GET = withStaffPermissions('employees.attendance')(async function(r
 });
 
 // PUT - Update attendance record
-export const PUT = withStaffPermissions('employees.attendance')(async function(request: NextRequest, { params }: { params: { id: string } }) {
+export const PUT = withStaffPermissions('employees.attendance')(async function(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     const { tenantId } = await getTenantContext(request);
     await validateTenantAccess(tenantId, request);
 
-    const recordId = params.id;
+    const { id } = await params;
+    const recordId = id;
     const body = await request.json();
     
     // Check if this is an approval action
@@ -296,12 +298,13 @@ export const PUT = withStaffPermissions('employees.attendance')(async function(r
 });
 
 // DELETE - Delete attendance record
-export const DELETE = withStaffPermissions('employees.attendance')(async function(request: NextRequest, { params }: { params: { id: string } }) {
+export const DELETE = withStaffPermissions('employees.attendance')(async function(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     const { tenantId } = await getTenantContext(request);
     await validateTenantAccess(tenantId, request);
 
-    const recordId = params.id;
+    const { id } = await params;
+    const recordId = id;
     
     // Check if record exists and get details
     const existingRecord = await execute_sql(`

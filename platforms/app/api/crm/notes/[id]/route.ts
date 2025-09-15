@@ -48,12 +48,13 @@ const noteUpdateSchema = z.object({
 });
 
 // GET - Get specific customer note with detailed information
-export const GET = withStaffPermissions('customers.view')(async function(request: NextRequest, { params }: { params: { id: string } }) {
+export const GET = withStaffPermissions('customers.view')(async function(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     const { tenantId } = await getTenantContext(request);
     await validateTenantAccess(tenantId, request);
 
-    const noteId = params.id;
+    const { id } = await params;
+    const noteId = id;
     const { searchParams } = new URL(request.url);
     
     const includeRelatedNotes = searchParams.get('include_related') === 'true';
@@ -173,12 +174,13 @@ export const GET = withStaffPermissions('customers.view')(async function(request
 });
 
 // PUT - Update customer note
-export const PUT = withStaffPermissions('customers.edit')(async function(request: NextRequest, { params }: { params: { id: string } }) {
+export const PUT = withStaffPermissions('customers.edit')(async function(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     const { tenantId } = await getTenantContext(request);
     await validateTenantAccess(tenantId, request);
 
-    const noteId = params.id;
+    const { id } = await params;
+    const noteId = id;
     const body = await request.json();
     const validatedData = noteUpdateSchema.parse(body);
     
@@ -288,12 +290,13 @@ export const PUT = withStaffPermissions('customers.edit')(async function(request
 });
 
 // DELETE - Delete customer note
-export const DELETE = withStaffPermissions('customers.delete')(async function(request: NextRequest, { params }: { params: { id: string } }) {
+export const DELETE = withStaffPermissions('customers.delete')(async function(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     const { tenantId } = await getTenantContext(request);
     await validateTenantAccess(tenantId, request);
 
-    const noteId = params.id;
+    const { id } = await params;
+    const noteId = id;
     
     // Check if note exists
     const existingNote = await execute_sql(`

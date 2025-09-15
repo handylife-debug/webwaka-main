@@ -141,6 +141,7 @@ export const OfflineProvider: React.FC<OfflineProviderProps> = ({ children }) =>
           stock: 50,
           image: '/images/jollof-rice.jpg',
           barcode: '123456789001',
+          tenantId: 'demo_tenant',
           updatedAt: new Date().toISOString(),
           _deleted: false
         },
@@ -152,6 +153,7 @@ export const OfflineProvider: React.FC<OfflineProviderProps> = ({ children }) =>
           stock: 100,
           image: '/images/coca-cola.jpg',
           barcode: '123456789002',
+          tenantId: 'demo_tenant',
           updatedAt: new Date().toISOString(),
           _deleted: false
         },
@@ -163,6 +165,7 @@ export const OfflineProvider: React.FC<OfflineProviderProps> = ({ children }) =>
           stock: 75,
           image: '/images/gala.jpg',
           barcode: '123456789003',
+          tenantId: 'demo_tenant',
           updatedAt: new Date().toISOString(),
           _deleted: false
         }

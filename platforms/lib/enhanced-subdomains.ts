@@ -1,4 +1,4 @@
-import { redis } from '@/lib/redis';
+import { redis, safeRedisOperation } from '@/lib/redis';
 
 export type SubscriptionPlan = 'Free' | 'Pro' | 'Enterprise';
 export type TenantStatus = 'Active' | 'Suspended' | 'Pending' | 'Inactive';
@@ -43,37 +43,41 @@ export function isValidIcon(str: string) {
 }
 
 export async function getEnhancedSubdomainData(subdomain: string): Promise<EnhancedTenant | null> {
-  try {
-    const sanitizedSubdomain = subdomain.toLowerCase().replace(/[^a-z0-9-]/g, '');
-    const data = await redis.get<EnhancedSubdomainData>(`subdomain:${sanitizedSubdomain}`);
-    
-    if (!data) return null;
-    
-    return {
-      subdomain: sanitizedSubdomain,
-      tenantName: data.tenantName || sanitizedSubdomain,
-      emoji: data.emoji || '❓',
-      subscriptionPlan: data.subscriptionPlan || 'Free',
-      status: data.status || 'Active',
-      createdAt: data.createdAt || Date.now(),
-      lastActive: data.lastActive,
-      features: data.features || [],
-    };
-  } catch (error) {
-    console.error('Redis connection error in getEnhancedSubdomainData:', error);
-    return null;
-  }
+  const sanitizedSubdomain = subdomain.toLowerCase().replace(/[^a-z0-9-]/g, '');
+  
+  return await safeRedisOperation(
+    async () => {
+      const data = await redis.get(`subdomain:${sanitizedSubdomain}`) as unknown as EnhancedSubdomainData | null;
+      
+      if (!data) return null;
+      
+      return {
+        subdomain: sanitizedSubdomain,
+        tenantName: data.tenantName || sanitizedSubdomain,
+        emoji: data.emoji || '❓',
+        subscriptionPlan: data.subscriptionPlan || 'Free',
+        status: data.status || 'Active',
+        createdAt: data.createdAt || Date.now(),
+        lastActive: data.lastActive,
+        features: data.features || [],
+      };
+    },
+    null
+  );
 }
 
 export async function getAllEnhancedSubdomains(): Promise<EnhancedTenant[]> {
-  try {
-    const keys = await redis.keys('subdomain:*');
+  return await safeRedisOperation(
+    async () => {
+      const keys = await redis.list('subdomain:');
 
-    if (!keys.length) {
-      return [];
-    }
+      if (!keys.length) {
+        return [];
+      }
 
-    const values = await redis.mget<EnhancedSubdomainData[]>(...keys);
+      const values = await Promise.all(
+        keys.map(key => redis.get(key) as unknown as EnhancedSubdomainData | null)
+      );
 
     return keys.map((key, index) => {
       const subdomain = key.replace('subdomain:', '');

@@ -11,13 +11,13 @@ export const metadata: Metadata = {
 };
 
 interface InvitePageProps {
-  params: {
+  params: Promise<{
     token: string;
-  };
+  }>;
 }
 
 export default async function InvitePage({ params }: InvitePageProps) {
-  const { token } = params;
+  const { token } = await params;
   
   // Validate the invitation token
   const inviteData = await validateInviteToken(token);
@@ -118,7 +118,7 @@ async function acceptInvitation(token: string) {
 
     // Invalidate the token by deleting it from Redis
     const { redis } = await import('@/lib/redis');
-    await redis.del(`invite:${token}`);
+    await redis.delete(`invite:${token}`);
     
     // Log the acceptance activity with correct user info
     await logActivity({

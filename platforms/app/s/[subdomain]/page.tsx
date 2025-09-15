@@ -10,9 +10,9 @@ export async function generateMetadata({
   params: Promise<{ subdomain: string }>;
 }): Promise<Metadata> {
   const { subdomain } = await params;
-  const subdomainData = await getSubdomainData(subdomain);
+  const subdomainDataResult = await getSubdomainData(subdomain);
 
-  if (!subdomainData) {
+  if (!subdomainDataResult) {
     return {
       title: rootDomain
     };
@@ -49,7 +49,7 @@ export default async function SubdomainPage({
 
       <div className="flex-1 flex items-center justify-center">
         <div className="text-center">
-          <div className="text-9xl mb-6">{subdomainData.emoji}</div>
+          <div className="text-9xl mb-6">{subdomainData?.emoji || '❓'}</div>
           <h1 className="text-4xl font-bold tracking-tight text-gray-900">
             Welcome to {subdomain}.{rootDomain}
           </h1>

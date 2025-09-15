@@ -23,7 +23,7 @@ export interface CartItem {
   id: string
   name: string
   price: number
-  category: string
+  categoryId?: string
   stock: number
   quantity: number
   image?: string

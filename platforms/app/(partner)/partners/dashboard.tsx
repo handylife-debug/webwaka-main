@@ -101,8 +101,7 @@ function StatsCards({ metrics }: { metrics: DashboardMetrics }) {
             <CardContent>
               <div className="text-2xl font-bold">{stat.value}</div>
               <p className={`text-xs mt-1 ${
-                stat.changeType === 'positive' ? 'text-green-600' : 
-                stat.changeType === 'negative' ? 'text-red-600' : 'text-gray-600'
+                stat.changeType === 'positive' ? 'text-green-600' : 'text-gray-600'
               }`}>
                 {stat.change}
               </p>
@@ -268,10 +267,10 @@ function PayoutRequestCard({ payableBalance }: { payableBalance: number }) {
       const result = await createPayoutRequestAction(formData);
 
       if (result.success) {
-        setMessage({ type: 'success', text: result.message });
+        setMessage({ type: 'success', text: result.message || 'Payout request submitted successfully' });
         setRequestAmount('');
       } else {
-        setMessage({ type: 'error', text: result.error });
+        setMessage({ type: 'error', text: result.error || 'Failed to submit payout request' });
       }
     } catch (error) {
       setMessage({ type: 'error', text: 'Failed to submit payout request. Please try again.' });

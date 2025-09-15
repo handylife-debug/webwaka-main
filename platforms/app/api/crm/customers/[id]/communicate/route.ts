@@ -42,12 +42,13 @@ const communicationSchema = z.object({
 });
 
 // POST - Send communication to customer
-export async function POST(request: NextRequest, { params }: { params: { id: string } }) {
+export async function POST(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     const { tenantId } = await getTenantContext(request);
     await validateTenantAccess(tenantId, request);
 
-    const customerId = params.id;
+    const { id } = await params;
+    const customerId = id;
     const body = await request.json();
     const validatedData = communicationSchema.parse(body);
     

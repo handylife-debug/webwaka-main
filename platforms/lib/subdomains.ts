@@ -31,7 +31,7 @@ type SubdomainData = {
   createdAt: number;
 };
 
-export async function getSubdomainData(subdomain: string) {
+export async function getSubdomainData(subdomain: string): Promise<SubdomainData | null> {
   const sanitizedSubdomain = subdomain.toLowerCase().replace(/[^a-z0-9-]/g, '');
   
   return await safeRedisOperation(

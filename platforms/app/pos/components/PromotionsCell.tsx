@@ -58,7 +58,7 @@ export interface CartItem {
   id: string
   name: string
   price: number
-  category: string
+  categoryId?: string
   stock: number
   quantity: number
   image?: string
@@ -291,7 +291,7 @@ export default function PromotionsCell({
 
       case 'category':
         const categoryItems = items.filter(item => 
-          discount.applicableIds?.includes(item.category)
+          discount.applicableIds?.includes(item.categoryId || '')
         )
         const categorySubtotal = categoryItems.reduce((sum, item) => 
           sum + (item.price * item.quantity), 0

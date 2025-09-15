@@ -2,6 +2,9 @@ import { redis } from '@/lib/redis';
 import type { AdminUser, AdminRole, UserStatus, ActivityLog } from '@/lib/types';
 import { roleHierarchy } from '@/lib/types';
 
+// Re-export types for convenience
+export type { AdminRole, UserStatus, ActivityLog };
+
 export function hasPermission(userRole: AdminRole, requiredRole: AdminRole): boolean {
   return roleHierarchy[userRole] >= roleHierarchy[requiredRole];
 }

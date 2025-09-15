@@ -55,12 +55,13 @@ const addressUpdateSchema = z.object({
 });
 
 // GET - Get specific address with detailed information
-export const GET = withStaffPermissions('customers.view')(async function(request: NextRequest, { params }: { params: { id: string } }) {
+export const GET = withStaffPermissions('customers.view')(async function(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     const { tenantId } = await getTenantContext(request);
     await validateTenantAccess(tenantId, request);
 
-    const addressId = params.id;
+    const { id } = await params;
+    const addressId = id;
     const { searchParams } = new URL(request.url);
     
     const includeNearbyAddresses = searchParams.get('include_nearby') === 'true';
@@ -182,12 +183,13 @@ export const GET = withStaffPermissions('customers.view')(async function(request
 });
 
 // PUT - Update address
-export const PUT = withStaffPermissions('customers.edit')(async function(request: NextRequest, { params }: { params: { id: string } }) {
+export const PUT = withStaffPermissions('customers.edit')(async function(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     const { tenantId } = await getTenantContext(request);
     await validateTenantAccess(tenantId, request);
 
-    const addressId = params.id;
+    const { id } = await params;
+    const addressId = id;
     const body = await request.json();
     const validatedData = addressUpdateSchema.parse(body);
     
@@ -307,12 +309,13 @@ export const PUT = withStaffPermissions('customers.edit')(async function(request
 });
 
 // DELETE - Delete address
-export const DELETE = withStaffPermissions('customers.delete')(async function(request: NextRequest, { params }: { params: { id: string } }) {
+export const DELETE = withStaffPermissions('customers.delete')(async function(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     const { tenantId } = await getTenantContext(request);
     await validateTenantAccess(tenantId, request);
 
-    const addressId = params.id;
+    const { id } = await params;
+    const addressId = id;
     
     // Check if address exists
     const existingAddress = await execute_sql(`

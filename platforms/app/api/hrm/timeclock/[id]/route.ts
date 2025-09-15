@@ -14,12 +14,13 @@ const timeClockUpdateSchema = z.object({
 });
 
 // GET - Get specific time clock entry details
-export const GET = withStaffPermissions('employees.attendance')(async function(request: NextRequest, { params }: { params: { id: string } }) {
+export const GET = withStaffPermissions('employees.attendance')(async function(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     const { tenantId } = await getTenantContext(request);
     await validateTenantAccess(tenantId, request);
 
-    const entryId = params.id;
+    const { id } = await params;
+    const entryId = id;
     
     // Get time clock entry with employee details
     const entryQuery = `
@@ -112,12 +113,13 @@ export const GET = withStaffPermissions('employees.attendance')(async function(r
 });
 
 // PUT - Update time clock entry (for corrections/verification)
-export const PUT = withStaffPermissions('employees.attendance')(async function(request: NextRequest, { params }: { params: { id: string } }) {
+export const PUT = withStaffPermissions('employees.attendance')(async function(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     const { tenantId } = await getTenantContext(request);
     await validateTenantAccess(tenantId, request);
 
-    const entryId = params.id;
+    const { id } = await params;
+    const entryId = id;
     const body = await request.json();
     const validatedData = timeClockUpdateSchema.parse(body);
     
@@ -258,12 +260,13 @@ export const PUT = withStaffPermissions('employees.attendance')(async function(r
 });
 
 // DELETE - Delete time clock entry (with cascade effects)
-export const DELETE = withStaffPermissions('employees.attendance')(async function(request: NextRequest, { params }: { params: { id: string } }) {
+export const DELETE = withStaffPermissions('employees.attendance')(async function(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     const { tenantId } = await getTenantContext(request);
     await validateTenantAccess(tenantId, request);
 
-    const entryId = params.id;
+    const { id } = await params;
+    const entryId = id;
     
     // Check if entry exists and get details
     const existingEntry = await execute_sql(`

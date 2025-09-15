@@ -2117,3 +2117,15 @@ export const ALL_SYSTEM_TABLES_SQL = [
 
 export const ALL_SYSTEM_INDEXES_SQL = ALL_INDEXES_SQL;
 export const ALL_SYSTEM_TRIGGERS_SQL = ALL_TRIGGERS_SQL;
+
+// People Management aggregations for init-people-management route
+export const ALL_PEOPLE_MANAGEMENT_TABLES_SQL = [
+  TENANTS_TABLE_SQL,
+  ALL_CRM_TABLES_SQL,
+  ALL_USER_TABLES_SQL,
+  ALL_HR_TABLES_SQL
+].join('\n\n');
+
+export const ALL_PEOPLE_MANAGEMENT_INDEXES_SQL = ALL_INDEXES_SQL;
+
+export const ALL_PEOPLE_MANAGEMENT_TRIGGERS_SQL = ALL_TRIGGERS_SQL;

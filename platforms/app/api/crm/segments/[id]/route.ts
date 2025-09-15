@@ -52,12 +52,13 @@ const segmentUpdateSchema = z.object({
 });
 
 // GET - Get specific segment details with members
-export const GET = withStaffPermissions('customers.view')(async function(request: NextRequest, { params }: { params: { id: string } }) {
+export const GET = withStaffPermissions('customers.view')(async function(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     const { tenantId } = await getTenantContext(request);
     await validateTenantAccess(tenantId, request);
 
-    const segmentId = params.id;
+    const { id } = await params;
+    const segmentId = id;
     const { searchParams } = new URL(request.url);
     const includeMembers = searchParams.get('include_members') === 'true';
     const membersPage = parseInt(searchParams.get('members_page') || '1');
@@ -152,12 +153,13 @@ export const GET = withStaffPermissions('customers.view')(async function(request
 });
 
 // PUT - Update segment details
-export const PUT = withStaffPermissions('customers.edit')(async function(request: NextRequest, { params }: { params: { id: string } }) {
+export const PUT = withStaffPermissions('customers.edit')(async function(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     const { tenantId } = await getTenantContext(request);
     await validateTenantAccess(tenantId, request);
 
-    const segmentId = params.id;
+    const { id } = await params;
+    const segmentId = id;
     const body = await request.json();
     const validatedData = segmentUpdateSchema.parse(body);
     
@@ -259,12 +261,13 @@ export const PUT = withStaffPermissions('customers.edit')(async function(request
 });
 
 // DELETE - Delete segment
-export const DELETE = withStaffPermissions('customers.delete')(async function(request: NextRequest, { params }: { params: { id: string } }) {
+export const DELETE = withStaffPermissions('customers.delete')(async function(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     const { tenantId } = await getTenantContext(request);
     await validateTenantAccess(tenantId, request);
 
-    const segmentId = params.id;
+    const { id } = await params;
+    const segmentId = id;
     
     // Check if segment exists
     const existingSegment = await execute_sql(`

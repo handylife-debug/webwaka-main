@@ -255,7 +255,7 @@ export default function VariantManager({ productId, onClose }: VariantManagerPro
     if (selectedVariants.size === variants.length) {
       setSelectedVariants(new Set())
     } else {
-      setSelectedVariants(new Set(variants.map(v => v.id)))
+      setSelectedVariants(new Set(variants.map(v => v.id).filter((id): id is string => id !== undefined)))
     }
   }
 
@@ -446,8 +446,8 @@ export default function VariantManager({ productId, onClose }: VariantManagerPro
                 <div key={variant.id} className="flex items-center p-4 border border-gray-200 rounded-lg bg-white">
                   <input
                     type="checkbox"
-                    checked={selectedVariants.has(variant.id)}
-                    onChange={() => toggleVariantSelection(variant.id)}
+                    checked={variant.id ? selectedVariants.has(variant.id) : false}
+                    onChange={() => variant.id && toggleVariantSelection(variant.id)}
                     className="h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500 mr-4"
                   />
                   
@@ -496,7 +496,7 @@ export default function VariantManager({ productId, onClose }: VariantManagerPro
                       <Edit className="w-4 h-4" />
                     </button>
                     <button
-                      onClick={() => handleDeleteVariant(variant.id)}
+                      onClick={() => variant.id && handleDeleteVariant(variant.id)}
                       className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-full transition-colors"
                       title="Delete variant"
                     >

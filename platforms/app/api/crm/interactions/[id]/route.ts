@@ -60,12 +60,13 @@ const interactionUpdateSchema = z.object({
 });
 
 // GET - Get specific interaction with detailed information
-export const GET = withStaffPermissions('customers.view')(async function(request: NextRequest, { params }: { params: { id: string } }) {
+export const GET = withStaffPermissions('customers.view')(async function(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     const { tenantId } = await getTenantContext(request);
     await validateTenantAccess(tenantId, request);
 
-    const interactionId = params.id;
+    const { id } = await params;
+    const interactionId = id;
     const { searchParams } = new URL(request.url);
     
     const includeRelatedInteractions = searchParams.get('include_related') === 'true';
@@ -201,12 +202,13 @@ export const GET = withStaffPermissions('customers.view')(async function(request
 });
 
 // PUT - Update interaction
-export const PUT = withStaffPermissions('customers.edit')(async function(request: NextRequest, { params }: { params: { id: string } }) {
+export const PUT = withStaffPermissions('customers.edit')(async function(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     const { tenantId } = await getTenantContext(request);
     await validateTenantAccess(tenantId, request);
 
-    const interactionId = params.id;
+    const { id } = await params;
+    const interactionId = id;
     const body = await request.json();
     const validatedData = interactionUpdateSchema.parse(body);
     
@@ -338,12 +340,13 @@ export const PUT = withStaffPermissions('customers.edit')(async function(request
 });
 
 // DELETE - Delete interaction
-export const DELETE = withStaffPermissions('customers.delete')(async function(request: NextRequest, { params }: { params: { id: string } }) {
+export const DELETE = withStaffPermissions('customers.delete')(async function(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     const { tenantId } = await getTenantContext(request);
     await validateTenantAccess(tenantId, request);
 
-    const interactionId = params.id;
+    const { id } = await params;
+    const interactionId = id;
     
     // Check if interaction exists
     const existingInteraction = await execute_sql(`
@@ -399,35 +402,35 @@ function calculateInteractionScore(interaction: any): number {
   let score = 50; // Base score
   
   // Outcome impact
-  const outcomeScores = {
+  const outcomeScoreMap = {
     'successful': 20,
     'neutral': 0,
     'unsuccessful': -15,
     'no_contact': -10,
     'rescheduled': -5,
     'cancelled': -10
-  };
-  score += outcomeScores[interaction.outcome] || 0;
+  } as const;
+  score += outcomeScoreMap[interaction.outcome as keyof typeof outcomeScoreMap] || 0;
   
   // Sentiment impact
-  const sentimentScores = {
+  const sentimentScoreMap = {
     'very_positive': 20,
     'positive': 10,
     'neutral': 0,
     'negative': -10,
     'very_negative': -20
-  };
-  score += sentimentScores[interaction.sentiment] || 0;
+  } as const;
+  score += sentimentScoreMap[interaction.sentiment as keyof typeof sentimentScoreMap] || 0;
   
   // Quality impact
-  const qualityScores = {
+  const qualityScoreMap = {
     'excellent': 15,
     'good': 10,
     'average': 0,
     'poor': -10,
     'very_poor': -15
-  };
-  score += qualityScores[interaction.interaction_quality] || 0;
+  } as const;
+  score += qualityScoreMap[interaction.interaction_quality as keyof typeof qualityScoreMap] || 0;
   
   // Objectives met bonus
   if (interaction.objectives_met) {

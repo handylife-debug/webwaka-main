@@ -160,7 +160,7 @@ export const GET = withStaffPermissions('employees.attendance')(async function(r
     // Get time clock entries for all records in a single batched query if requested
     if (includeTimeEntries && result.rows.length > 0) {
       // Create list of employee-date pairs for efficient batch query
-      const employeeDatePairs = result.rows.map((record, index) => ({
+      const employeeDatePairs = result.rows.map((record: any, index: number) => ({
         employee_id: record.employee_id,
         attendance_date: record.attendance_date,
         record_index: index
@@ -174,14 +174,14 @@ export const GET = withStaffPermissions('employees.attendance')(async function(r
         FROM time_clock_entries tce
         WHERE tce.tenant_id = $1 
           AND (tce.employee_id, DATE(tce.entry_timestamp AT TIME ZONE 'UTC')) IN (
-            ${employeeDatePairs.map((_, i) => `($${i * 2 + 2}, $${i * 2 + 3})`).join(', ')}
+            ${employeeDatePairs.map((_: any, i: number) => `($${i * 2 + 2}, $${i * 2 + 3})`).join(', ')}
           )
         ORDER BY tce.employee_id, tce.entry_timestamp ASC
       `;
       
       // Build parameters array: [tenantId, emp1, date1, emp2, date2, ...]
       const timeEntriesParams = [tenantId];
-      employeeDatePairs.forEach(pair => {
+      employeeDatePairs.forEach((pair: any) => {
         timeEntriesParams.push(pair.employee_id, pair.attendance_date);
       });
       
@@ -189,7 +189,7 @@ export const GET = withStaffPermissions('employees.attendance')(async function(r
       
       // Group time entries by employee_id and date for efficient assignment
       const timeEntriesMap = new Map();
-      allTimeEntriesResult.rows.forEach(entry => {
+      allTimeEntriesResult.rows.forEach((entry: any) => {
         const key = `${entry.employee_id}:${entry.entry_date}`;
         if (!timeEntriesMap.has(key)) {
           timeEntriesMap.set(key, []);
@@ -198,7 +198,7 @@ export const GET = withStaffPermissions('employees.attendance')(async function(r
       });
       
       // Assign time entries to their respective attendance records
-      result.rows.forEach(record => {
+      result.rows.forEach((record: any) => {
         const key = `${record.employee_id}:${record.attendance_date}`;
         record.time_entries = timeEntriesMap.get(key) || [];
       });

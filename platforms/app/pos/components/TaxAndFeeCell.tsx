@@ -31,7 +31,7 @@ export interface CartItem {
   id: string
   name: string
   price: number
-  category: string
+  categoryId?: string
   stock: number
   quantity: number
   image?: string
@@ -227,7 +227,7 @@ export default function TaxAndFeeCell({
 
       case 'category':
         const categoryItems = items.filter(item => 
-          taxRate.applicableIds?.includes(item.category)
+          taxRate.applicableIds?.includes(item.categoryId || '')
         )
         taxableAmount = categoryItems.reduce((sum, item) => 
           sum + (item.price * item.quantity), 0
@@ -277,7 +277,7 @@ export default function TaxAndFeeCell({
 
       case 'category':
         const categoryItems = items.filter(item => 
-          fee.applicableIds?.includes(item.category)
+          fee.applicableIds?.includes(item.categoryId || '')
         )
         applicableAmount = categoryItems.reduce((sum, item) => 
           sum + (item.price * item.quantity), 0

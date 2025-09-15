@@ -64,11 +64,12 @@ export function PlansManagementClient({
       const result = await updatePlanAction(planId, data);
       
       if (result.success) {
-        // Update local state optimistically
+        // Update local state optimistically (exclude features to avoid type conflicts)
+        const { features, ...updateData } = data;
         setPlans(prev => 
           prev.map(plan => 
             plan.id === planId 
-              ? { ...plan, ...data, updatedAt: new Date() }
+              ? { ...plan, ...updateData, updatedAt: new Date() }
               : plan
           )
         );

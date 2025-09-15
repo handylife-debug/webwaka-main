@@ -59,12 +59,13 @@ const contactUpdateSchema = z.object({
 });
 
 // GET - Get specific contact with detailed information
-export const GET = withStaffPermissions('customers.view')(async function(request: NextRequest, { params }: { params: { id: string } }) {
+export const GET = withStaffPermissions('customers.view')(async function(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     const { tenantId } = await getTenantContext(request);
     await validateTenantAccess(tenantId, request);
 
-    const contactId = params.id;
+    const { id } = await params;
+    const contactId = id;
     const { searchParams } = new URL(request.url);
     
     const includeInteractions = searchParams.get('include_interactions') === 'true';
@@ -170,19 +171,21 @@ export const GET = withStaffPermissions('customers.view')(async function(request
       
       // Calculate engagement score based on interactions and relationship strength
       const interactionScore = Math.min((analytics.interactions_last_30_days / 5) * 25, 25); // Max 25 points
-      const relationshipScore = {
+      const relationshipScoreMap = {
         'weak': 10,
         'moderate': 20,
         'strong': 30,
         'champion': 40
-      }[contact.relationship_strength] || 20;
+      } as const;
+      const relationshipScore = relationshipScoreMap[contact.relationship_strength as keyof typeof relationshipScoreMap] || 20;
       
-      const influenceScore = {
+      const influenceScoreMap = {
         'low': 5,
         'medium': 10,
         'high': 15,
         'decision_maker': 20
-      }[contact.influence_level] || 10;
+      } as const;
+      const influenceScore = influenceScoreMap[contact.influence_level as keyof typeof influenceScoreMap] || 10;
       
       analytics.engagement_score = Math.round(interactionScore + relationshipScore + influenceScore + contact.lead_score * 0.15);
       analytics.sentiment_ratio = analytics.total_interactions > 0 
@@ -211,12 +214,13 @@ export const GET = withStaffPermissions('customers.view')(async function(request
 });
 
 // PUT - Update contact
-export const PUT = withStaffPermissions('customers.edit')(async function(request: NextRequest, { params }: { params: { id: string } }) {
+export const PUT = withStaffPermissions('customers.edit')(async function(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     const { tenantId } = await getTenantContext(request);
     await validateTenantAccess(tenantId, request);
 
-    const contactId = params.id;
+    const { id } = await params;
+    const contactId = id;
     const body = await request.json();
     const validatedData = contactUpdateSchema.parse(body);
     
@@ -358,12 +362,13 @@ export const PUT = withStaffPermissions('customers.edit')(async function(request
 });
 
 // DELETE - Delete contact (with safety checks)
-export const DELETE = withStaffPermissions('customers.delete')(async function(request: NextRequest, { params }: { params: { id: string } }) {
+export const DELETE = withStaffPermissions('customers.delete')(async function(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     const { tenantId } = await getTenantContext(request);
     await validateTenantAccess(tenantId, request);
 
-    const contactId = params.id;
+    const { id } = await params;
+    const contactId = id;
     const { searchParams } = new URL(request.url);
     const forceDelete = searchParams.get('force') === 'true';
     

@@ -163,13 +163,13 @@ async function checkDocumentAccess(
     
     // If we reach here, check basic permission requirements
     const requiredPermissions = {
-      read: 'customers.view',
-      write: 'customers.edit', 
-      delete: 'customers.delete'
+      read: 'customers.view' as const,
+      write: 'customers.edit' as const, 
+      delete: 'customers.delete' as const
     };
     
     const requiredPermission = requiredPermissions[requiredLevel];
-    if (!userPermissions.allPermissions.includes(requiredPermission)) {
+    if (requiredPermission && !userPermissions.allPermissions.includes(requiredPermission)) {
       console.warn(`Access denied: User ${userId} lacks ${requiredPermission} permission`);
       return { allowed: false, error: `Missing required permission: ${requiredPermission}` };
     }
@@ -183,16 +183,19 @@ async function checkDocumentAccess(
 }
 
 // GET - Retrieve specific document with detailed information
-export const GET = withStaffPermissions('customers.view')(async function(request: NextRequest, { params }: { params: { id: string } }, context: any) {
+export const GET = withStaffPermissions('customers.view')(async function(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     const { tenantId } = await getTenantContext(request);
     await validateTenantAccess(tenantId, request);
 
-    const documentId = params.id;
+    const { id } = await params;
+    const documentId = id;
     const { searchParams } = new URL(request.url);
-    const currentUserId = context?.user?.id;
     
-    if (!currentUserId) {
+    // Get current user ID from the request headers or context
+    const currentUserId = request.headers.get('x-user-id') || 'system';
+    
+    if (!currentUserId || currentUserId === 'system') {
       return NextResponse.json({
         success: false,
         message: 'User authentication required'
@@ -336,14 +339,15 @@ export const GET = withStaffPermissions('customers.view')(async function(request
 });
 
 // PUT - Update document information
-export const PUT = withStaffPermissions('customers.edit')(async function(request: NextRequest, { params }: { params: { id: string } }, context: any) {
+export const PUT = withStaffPermissions('customers.edit')(async function(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     const { tenantId } = await getTenantContext(request);
     await validateTenantAccess(tenantId, request);
 
-    const documentId = params.id;
+    const { id } = await params;
+    const documentId = id;
     const body = await request.json();
-    const currentUserId = context?.user?.id;
+    const currentUserId = request.headers.get('x-user-id') || 'system';
     
     if (!currentUserId) {
       return NextResponse.json({
@@ -380,8 +384,8 @@ export const PUT = withStaffPermissions('customers.edit')(async function(request
         console.log(`Document ${documentId} approved by user ${currentUserId} at ${validatedData.approved_at}`);
       } else if (validatedData.approval_status === 'rejected' || validatedData.approval_status === 'pending') {
         // Clear approval when rejecting or reverting to pending
-        validatedData.approved_by = null;
-        validatedData.approved_at = null;
+        validatedData.approved_by = undefined;
+        validatedData.approved_at = undefined;
         
         // Log status change for audit
         console.log(`Document ${documentId} approval status changed to ${validatedData.approval_status} by user ${currentUserId}`);
@@ -428,14 +432,15 @@ export const PUT = withStaffPermissions('customers.edit')(async function(request
 });
 
 // DELETE - Delete or archive document
-export const DELETE = withStaffPermissions('customers.delete')(async function(request: NextRequest, { params }: { params: { id: string } }, context: any) {
+export const DELETE = withStaffPermissions('customers.delete')(async function(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     const { tenantId } = await getTenantContext(request);
     await validateTenantAccess(tenantId, request);
 
-    const documentId = params.id;
+    const { id } = await params;
+    const documentId = id;
     const { searchParams } = new URL(request.url);
-    const currentUserId = context?.user?.id;
+    const currentUserId = request.headers.get('x-user-id') || 'system';
     const softDelete = searchParams.get('soft_delete') !== 'false'; // Default to soft delete
     
     if (!currentUserId) {

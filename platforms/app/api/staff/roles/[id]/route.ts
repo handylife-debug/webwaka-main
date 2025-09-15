@@ -76,12 +76,13 @@ const STANDARD_PERMISSIONS = {
 };
 
 // GET - Get specific role details with users
-export const GET = withStaffPermissions('staff.roles')(async function(request: NextRequest, { params }: { params: { id: string } }) {
+export const GET = withStaffPermissions('staff.roles')(async function(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     const { tenantId } = await getTenantContext(request);
     await validateTenantAccess(tenantId, request);
 
-    const roleId = params.id;
+    const { id } = await params;
+    const roleId = id;
     const { searchParams } = new URL(request.url);
     const includeUsers = searchParams.get('include_users') === 'true';
     const includePermissionDetails = searchParams.get('include_permission_details') === 'true';
@@ -176,12 +177,13 @@ export const GET = withStaffPermissions('staff.roles')(async function(request: N
 });
 
 // PUT - Update role details
-export const PUT = withStaffPermissions('staff.roles')(async function(request: NextRequest, { params }: { params: { id: string } }) {
+export const PUT = withStaffPermissions('staff.roles')(async function(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     const { tenantId } = await getTenantContext(request);
     await validateTenantAccess(tenantId, request);
 
-    const roleId = params.id;
+    const { id } = await params;
+    const roleId = id;
     const body = await request.json();
     const validatedData = roleUpdateSchema.parse(body);
     
@@ -317,12 +319,13 @@ export const PUT = withStaffPermissions('staff.roles')(async function(request: N
 });
 
 // DELETE - Delete role (with safety checks)
-export const DELETE = withStaffPermissions('staff.roles')(async function(request: NextRequest, { params }: { params: { id: string } }) {
+export const DELETE = withStaffPermissions('staff.roles')(async function(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     const { tenantId } = await getTenantContext(request);
     await validateTenantAccess(tenantId, request);
 
-    const roleId = params.id;
+    const { id } = await params;
+    const roleId = id;
     const { searchParams } = new URL(request.url);
     const force = searchParams.get('force') === 'true';
     

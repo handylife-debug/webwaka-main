@@ -11,7 +11,7 @@ interface Product {
   id: string
   name: string
   price: number
-  category: string
+  categoryId?: string
   stock: number
   image?: string
 }
@@ -107,7 +107,7 @@ function POSMain() {
   }, [cart])
 
   const filteredProducts = products.filter(product => {
-    const matchesCategory = selectedCategory === 'All' || product.category === selectedCategory
+    const matchesCategory = selectedCategory === 'All' || product.categoryId === selectedCategory
     const matchesSearch = product.name.toLowerCase().includes(searchTerm.toLowerCase())
     return matchesCategory && matchesSearch
   })
@@ -458,7 +458,7 @@ function POSMain() {
           <div className="flex-1 overflow-y-auto">
             <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-4">
               {products.filter(product => {
-                const matchesCategory = selectedCategory === 'All' || product.category === selectedCategory
+                const matchesCategory = selectedCategory === 'All' || product.categoryId === selectedCategory
                 const matchesSearch = product.name.toLowerCase().includes(searchTerm.toLowerCase())
                 return matchesCategory && matchesSearch
               }).map(product => {
@@ -479,7 +479,7 @@ function POSMain() {
                     <Package className="w-8 h-8 text-gray-400" />
                   </div>
                   <h3 className="font-semibold text-gray-900 mb-1">{product.name}</h3>
-                  <p className="text-sm text-gray-600 mb-2">{product.category}</p>
+                  <p className="text-sm text-gray-600 mb-2">{product.categoryId || 'Uncategorized'}</p>
                   <div className="flex justify-between items-center">
                     <span className="text-lg font-bold text-blue-600">${product.price.toFixed(2)}</span>
                     <span className={`text-xs ${availableStock <= 0 ? 'text-red-500' : 'text-gray-500'}`}>

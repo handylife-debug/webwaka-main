@@ -60,12 +60,13 @@ const customerUpdateSchema = z.object({
 });
 
 // GET - Get specific customer with detailed information
-export const GET = withStaffPermissions('customers.view')(async function(request: NextRequest, { params }: { params: { id: string } }) {
+export const GET = withStaffPermissions('customers.view')(async function(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     const { tenantId } = await getTenantContext(request);
     await validateTenantAccess(tenantId, request);
 
-    const customerId = params.id;
+    const { id } = await params;
+    const customerId = id;
     const { searchParams } = new URL(request.url);
     
     const includeContacts = searchParams.get('include_contacts') === 'true';
@@ -282,12 +283,13 @@ export const GET = withStaffPermissions('customers.view')(async function(request
 });
 
 // PUT - Update customer
-export const PUT = withStaffPermissions('customers.edit')(async function(request: NextRequest, { params }: { params: { id: string } }) {
+export const PUT = withStaffPermissions('customers.edit')(async function(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     const { tenantId } = await getTenantContext(request);
     await validateTenantAccess(tenantId, request);
 
-    const customerId = params.id;
+    const { id } = await params;
+    const customerId = id;
     const body = await request.json();
     const validatedData = customerUpdateSchema.parse(body);
     
@@ -411,12 +413,13 @@ export const PUT = withStaffPermissions('customers.edit')(async function(request
 });
 
 // DELETE - Delete customer (with safety checks)
-export const DELETE = withStaffPermissions('customers.delete')(async function(request: NextRequest, { params }: { params: { id: string } }) {
+export const DELETE = withStaffPermissions('customers.delete')(async function(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     const { tenantId } = await getTenantContext(request);
     await validateTenantAccess(tenantId, request);
 
-    const customerId = params.id;
+    const { id } = await params;
+    const customerId = id;
     const { searchParams } = new URL(request.url);
     const forceDelete = searchParams.get('force') === 'true';
     

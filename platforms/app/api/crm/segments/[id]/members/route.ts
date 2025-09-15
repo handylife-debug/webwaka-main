@@ -25,12 +25,13 @@ const bulkMemberSchema = z.object({
 });
 
 // GET - List segment members with filtering
-export const GET = withStaffPermissions('customers.view')(async function(request: NextRequest, { params }: { params: { id: string } }) {
+export const GET = withStaffPermissions('customers.view')(async function(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     const { tenantId } = await getTenantContext(request);
     await validateTenantAccess(tenantId, request);
 
-    const segmentId = params.id;
+    const { id } = await params;
+    const segmentId = id;
     const { searchParams } = new URL(request.url);
     
     // Pagination
@@ -174,12 +175,13 @@ export const GET = withStaffPermissions('customers.view')(async function(request
 });
 
 // POST - Add or remove customers from segment
-export const POST = withStaffPermissions('customers.edit')(async function(request: NextRequest, { params }: { params: { id: string } }) {
+export const POST = withStaffPermissions('customers.edit')(async function(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     const { tenantId } = await getTenantContext(request);
     await validateTenantAccess(tenantId, request);
 
-    const segmentId = params.id;
+    const { id } = await params;
+    const segmentId = id;
     const body = await request.json();
     
     // Check if this is a bulk operation or individual member operation
