@@ -1934,3 +1934,1090 @@ export const VERIFY_INVENTORY_BUSINESS_LOGIC_FUNCTION_SQL = `
   END;
   $$ language 'plpgsql';
 `;
+
+// =======================================================================
+// SECURITY AND COMPLIANCE SCHEMAS
+// =======================================================================
+
+// Tenant-specific security configuration for PCI compliance
+export const TENANT_SECURITY_SETTINGS_TABLE_SQL = `
+  CREATE TABLE IF NOT EXISTS tenant_security_settings (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    tenant_id UUID NOT NULL,
+    
+    -- PCI Compliance Configuration
+    pci_compliance_enabled BOOLEAN DEFAULT false,
+    pci_compliance_level VARCHAR(20) DEFAULT 'pci_dss_level_4' CHECK (pci_compliance_level IN ('pci_dss_level_1', 'pci_dss_level_2', 'pci_dss_level_3', 'pci_dss_level_4', 'non_compliant')),
+    
+    -- Encryption Configuration
+    data_encryption_enabled BOOLEAN DEFAULT false,
+    encryption_algorithm VARCHAR(50) DEFAULT 'aes-256-gcm',
+    key_rotation_enabled BOOLEAN DEFAULT false,
+    key_rotation_frequency_days INTEGER DEFAULT 90,
+    last_key_rotation TIMESTAMP WITH TIME ZONE,
+    
+    -- Audit Logging Configuration
+    audit_logging_enabled BOOLEAN DEFAULT false,
+    audit_retention_days INTEGER DEFAULT 365,
+    audit_log_encryption BOOLEAN DEFAULT true,
+    
+    -- Compliance Assessment
+    last_assessment_date TIMESTAMP WITH TIME ZONE,
+    next_assessment_due TIMESTAMP WITH TIME ZONE,
+    compliance_status VARCHAR(20) DEFAULT 'not_assessed' CHECK (compliance_status IN ('compliant', 'non_compliant', 'needs_review', 'not_assessed')),
+    
+    -- Security Metadata
+    security_contact_email VARCHAR(255),
+    security_incidents_count INTEGER DEFAULT 0,
+    last_incident_date TIMESTAMP WITH TIME ZONE,
+    
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    created_by UUID,
+    
+    -- Constraints
+    CONSTRAINT fk_tenant_security_tenant FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
+    CONSTRAINT unique_security_settings_per_tenant UNIQUE (tenant_id),
+    CONSTRAINT check_rotation_frequency_positive CHECK (key_rotation_frequency_days > 0),
+    CONSTRAINT check_retention_days_positive CHECK (audit_retention_days > 0)
+  );
+`;
+
+// Per-tenant encryption key management with envelope encryption
+export const TENANT_ENCRYPTION_KEYS_TABLE_SQL = `
+  CREATE TABLE IF NOT EXISTS tenant_encryption_keys (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    tenant_id UUID NOT NULL,
+    
+    -- Key Hierarchy
+    key_type VARCHAR(20) NOT NULL CHECK (key_type IN ('dek', 'kek')), -- DEK = Data Encryption Key, KEK = Key Encryption Key
+    key_purpose VARCHAR(50) NOT NULL, -- 'payment_data', 'customer_pii', 'transaction_data', etc.
+    
+    -- Key Material (encrypted for DEKs, reference for KEKs)
+    encrypted_key_material TEXT NOT NULL, -- DEK encrypted by KEK, or KEK reference/ID from KMS
+    key_derivation_salt BYTEA, -- Salt used for key derivation
+    initialization_vector BYTEA, -- IV for key encryption
+    auth_tag BYTEA, -- Authentication tag for GCM mode
+    
+    -- Key Metadata
+    key_version INTEGER DEFAULT 1,
+    algorithm VARCHAR(50) DEFAULT 'aes-256-gcm',
+    key_size_bits INTEGER DEFAULT 256,
+    
+    -- Key Lifecycle
+    status VARCHAR(20) DEFAULT 'active' CHECK (status IN ('active', 'rotated', 'revoked', 'expired')),
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    expires_at TIMESTAMP WITH TIME ZONE,
+    rotated_at TIMESTAMP WITH TIME ZONE,
+    revoked_at TIMESTAMP WITH TIME ZONE,
+    
+    -- Security Tracking
+    usage_count BIGINT DEFAULT 0,
+    last_used_at TIMESTAMP WITH TIME ZONE,
+    created_by UUID,
+    rotated_by UUID,
+    
+    -- Constraints
+    CONSTRAINT fk_tenant_keys_tenant FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
+    CONSTRAINT unique_active_key_per_purpose UNIQUE (tenant_id, key_purpose, key_version) DEFERRABLE INITIALLY DEFERRED,
+    CONSTRAINT check_key_size_valid CHECK (key_size_bits IN (128, 192, 256)),
+    CONSTRAINT check_expiry_after_creation CHECK (expires_at IS NULL OR expires_at > created_at)
+  );
+`;
+
+// Tamper-evident audit log with hash chaining for PCI DSS Requirement 10
+export const SECURITY_AUDIT_LOGS_TABLE_SQL = `
+  CREATE TABLE IF NOT EXISTS security_audit_logs (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    tenant_id UUID NOT NULL,
+    
+    -- Audit Event Information
+    event_type VARCHAR(100) NOT NULL, -- 'data_encryption', 'key_rotation', 'access_granted', etc.
+    event_action VARCHAR(50) NOT NULL, -- 'create', 'read', 'update', 'delete', 'access', 'decrypt'
+    event_result VARCHAR(20) NOT NULL CHECK (event_result IN ('success', 'failure', 'error')),
+    
+    -- Actor Information
+    user_id UUID,
+    user_role VARCHAR(50),
+    user_email VARCHAR(255),
+    
+    -- Request Context
+    ip_address INET NOT NULL,
+    user_agent TEXT,
+    session_id VARCHAR(255),
+    request_id VARCHAR(255),
+    
+    -- Resource Information
+    resource_type VARCHAR(50) NOT NULL, -- 'payment_card', 'transaction', 'encryption_key', 'customer_data'
+    resource_id VARCHAR(255),
+    
+    -- Event Details
+    event_details JSONB DEFAULT '{}'::jsonb,
+    risk_level VARCHAR(20) DEFAULT 'low' CHECK (risk_level IN ('low', 'medium', 'high', 'critical')),
+    pci_relevant BOOLEAN DEFAULT false,
+    
+    -- Tamper Detection
+    event_hash VARCHAR(64) NOT NULL, -- SHA-256 hash of event data
+    previous_hash VARCHAR(64), -- Hash of previous audit log entry for chain integrity
+    hash_chain_position BIGINT NOT NULL, -- Sequential position in hash chain
+    
+    -- Timestamps
+    event_timestamp TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    recorded_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    
+    -- Immutability (no updates allowed after creation)
+    is_immutable BOOLEAN DEFAULT true,
+    
+    -- Constraints
+    CONSTRAINT fk_audit_logs_tenant FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
+    CONSTRAINT check_hash_chain_position_positive CHECK (hash_chain_position > 0)
+  );
+  
+  -- Create partial index for hash chain integrity verification
+  CREATE INDEX IF NOT EXISTS idx_audit_logs_hash_chain ON security_audit_logs(tenant_id, hash_chain_position);
+  CREATE INDEX IF NOT EXISTS idx_audit_logs_pci_relevant ON security_audit_logs(tenant_id, pci_relevant, event_timestamp) WHERE pci_relevant = true;
+`;
+
+// PCI compliance vulnerability assessments
+export const PCI_VULNERABILITY_ASSESSMENTS_TABLE_SQL = `
+  CREATE TABLE IF NOT EXISTS pci_vulnerability_assessments (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    tenant_id UUID NOT NULL,
+    
+    -- Assessment Information
+    assessment_date TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    assessment_type VARCHAR(50) NOT NULL CHECK (assessment_type IN ('automated', 'manual', 'penetration_test', 'compliance_audit')),
+    assessor_id UUID,
+    
+    -- Compliance Status
+    overall_compliance_level VARCHAR(20) NOT NULL,
+    card_data_exposure_risk VARCHAR(20) NOT NULL,
+    total_vulnerabilities INTEGER DEFAULT 0,
+    critical_vulnerabilities INTEGER DEFAULT 0,
+    high_vulnerabilities INTEGER DEFAULT 0,
+    
+    -- Assessment Results
+    vulnerabilities JSONB DEFAULT '[]'::jsonb,
+    compliance_requirements JSONB DEFAULT '[]'::jsonb,
+    recommendations JSONB DEFAULT '[]'::jsonb,
+    
+    -- Follow-up
+    next_assessment_due TIMESTAMP WITH TIME ZONE,
+    remediation_deadline TIMESTAMP WITH TIME ZONE,
+    status VARCHAR(20) DEFAULT 'completed' CHECK (status IN ('in_progress', 'completed', 'failed', 'cancelled')),
+    
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    
+    -- Constraints
+    CONSTRAINT fk_pci_assessments_tenant FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
+    CONSTRAINT check_vulnerabilities_non_negative CHECK (
+      total_vulnerabilities >= 0 AND 
+      critical_vulnerabilities >= 0 AND 
+      high_vulnerabilities >= 0 AND
+      critical_vulnerabilities <= total_vulnerabilities AND
+      high_vulnerabilities <= total_vulnerabilities
+    )
+  );
+`;
+
+// =======================================================================
+// SECURITY TRIGGERS AND FUNCTIONS
+// =======================================================================
+
+// Trigger to prevent modification of immutable audit logs
+export const IMMUTABLE_AUDIT_LOG_TRIGGER_SQL = `
+  CREATE OR REPLACE FUNCTION prevent_audit_log_modification()
+  RETURNS TRIGGER AS $$
+  BEGIN
+    -- Prevent any updates or deletes on audit logs
+    IF TG_OP = 'UPDATE' THEN
+      RAISE EXCEPTION 'SECURITY_VIOLATION: Audit logs are immutable and cannot be modified. Log ID: %', OLD.id;
+    END IF;
+    
+    IF TG_OP = 'DELETE' THEN
+      -- Only allow deletion for retention policy cleanup by system
+      IF current_user != 'postgres' AND current_user != 'system_cleanup' THEN
+        RAISE EXCEPTION 'SECURITY_VIOLATION: Audit logs cannot be deleted manually. Log ID: %', OLD.id;
+      END IF;
+    END IF;
+    
+    RETURN COALESCE(OLD, NEW);
+  END;
+  $$ LANGUAGE plpgsql SECURITY DEFINER;
+
+  DROP TRIGGER IF EXISTS trigger_immutable_audit_logs ON security_audit_logs;
+  CREATE TRIGGER trigger_immutable_audit_logs
+    BEFORE UPDATE OR DELETE ON security_audit_logs
+    FOR EACH ROW
+    EXECUTE FUNCTION prevent_audit_log_modification();
+`;
+
+// Function to calculate hash chain for audit log integrity
+export const AUDIT_LOG_HASH_CHAIN_TRIGGER_SQL = `
+  CREATE OR REPLACE FUNCTION calculate_audit_log_hash()
+  RETURNS TRIGGER AS $$
+  DECLARE
+    event_data_text TEXT;
+    previous_log_hash VARCHAR(64);
+    chain_position BIGINT;
+  BEGIN
+    -- Get the previous hash and calculate next chain position
+    SELECT 
+      COALESCE(event_hash, ''),
+      COALESCE(MAX(hash_chain_position), 0) + 1
+    INTO previous_log_hash, chain_position
+    FROM security_audit_logs 
+    WHERE tenant_id = NEW.tenant_id
+    ORDER BY hash_chain_position DESC
+    LIMIT 1;
+    
+    -- Set chain position
+    NEW.hash_chain_position = chain_position;
+    NEW.previous_hash = previous_log_hash;
+    
+    -- Create standardized event data for hashing
+    event_data_text = NEW.tenant_id::text || '|' ||
+                     NEW.event_type || '|' ||
+                     NEW.event_action || '|' ||
+                     NEW.event_result || '|' ||
+                     COALESCE(NEW.user_id::text, '') || '|' ||
+                     NEW.ip_address::text || '|' ||
+                     NEW.resource_type || '|' ||
+                     COALESCE(NEW.resource_id, '') || '|' ||
+                     NEW.event_timestamp::text || '|' ||
+                     previous_log_hash || '|' ||
+                     chain_position::text;
+    
+    -- Calculate SHA-256 hash
+    NEW.event_hash = encode(digest(event_data_text, 'sha256'), 'hex');
+    
+    RETURN NEW;
+  END;
+  $$ LANGUAGE plpgsql;
+
+  DROP TRIGGER IF EXISTS trigger_audit_log_hash_chain ON security_audit_logs;
+  CREATE TRIGGER trigger_audit_log_hash_chain
+    BEFORE INSERT ON security_audit_logs
+    FOR EACH ROW
+    EXECUTE FUNCTION calculate_audit_log_hash();
+`;
+
+// Function to validate tenant encryption key management
+export const TENANT_KEY_VALIDATION_TRIGGER_SQL = `
+  CREATE OR REPLACE FUNCTION validate_tenant_encryption_keys()
+  RETURNS TRIGGER AS $$
+  DECLARE
+    active_key_count INTEGER;
+  BEGIN
+    -- Ensure only one active key per tenant per purpose
+    IF NEW.status = 'active' THEN
+      SELECT COUNT(*) INTO active_key_count
+      FROM tenant_encryption_keys
+      WHERE tenant_id = NEW.tenant_id
+        AND key_purpose = NEW.key_purpose
+        AND status = 'active'
+        AND id != NEW.id;
+      
+      IF active_key_count > 0 THEN
+        RAISE EXCEPTION 'SECURITY_VIOLATION: Only one active encryption key allowed per tenant per purpose. Tenant: %, Purpose: %', 
+          NEW.tenant_id, NEW.key_purpose;
+      END IF;
+    END IF;
+    
+    -- Validate key material is not empty
+    IF NEW.encrypted_key_material IS NULL OR length(NEW.encrypted_key_material) < 32 THEN
+      RAISE EXCEPTION 'SECURITY_VIOLATION: Encryption key material cannot be empty or too short. Minimum 32 characters required.';
+    END IF;
+    
+    -- Auto-set expiry for DEKs if not provided
+    IF NEW.key_type = 'dek' AND NEW.expires_at IS NULL THEN
+      NEW.expires_at = NEW.created_at + INTERVAL '90 days';
+    END IF;
+    
+    RETURN NEW;
+  END;
+  $$ LANGUAGE plpgsql;
+
+  DROP TRIGGER IF EXISTS trigger_validate_tenant_keys ON tenant_encryption_keys;
+  CREATE TRIGGER trigger_validate_tenant_keys
+    BEFORE INSERT OR UPDATE ON tenant_encryption_keys
+    FOR EACH ROW
+    EXECUTE FUNCTION validate_tenant_encryption_keys();
+`;
+
+// ==============================================================================
+// SPLIT PAYMENT CELL (CC-002-2) DATABASE SCHEMA
+// ==============================================================================
+// Comprehensive schema for split payments, installments, and layaway system
+// Supports multi-party transactions, partial payments, and product reservation
+// Integrates with PaymentGatewayCore Cell for Nigerian payment processing
+
+// Main split payments table - tracks multi-party payment transactions
+export const SPLIT_PAYMENTS_TABLE_SQL = `
+  CREATE TABLE IF NOT EXISTS split_payments (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    tenant_id UUID NOT NULL,
+    reference VARCHAR(100) NOT NULL,
+    
+    -- Payment details
+    total_amount DECIMAL(15,2) NOT NULL,
+    currency VARCHAR(3) NOT NULL DEFAULT 'NGN',
+    provider VARCHAR(50) NOT NULL CHECK (provider IN ('paystack', 'flutterwave', 'interswitch')),
+    
+    -- Customer and merchant information
+    customer_id VARCHAR(255) NOT NULL,
+    merchant_id VARCHAR(255),
+    
+    -- Payment status and tracking
+    status VARCHAR(20) DEFAULT 'initialized' CHECK (status IN ('initialized', 'pending', 'processing', 'completed', 'failed', 'cancelled', 'disputed', 'refunded', 'partially_refunded')),
+    payment_url TEXT,
+    gateway_reference VARCHAR(255),
+    gateway_response JSONB,
+    
+    -- Split configuration
+    total_parties INTEGER NOT NULL CHECK (total_parties >= 2 AND total_parties <= 10),
+    split_calculation JSONB NOT NULL, -- Stores calculated split amounts and metadata
+    rounding_adjustment DECIMAL(10,4) DEFAULT 0,
+    
+    -- Tracking and audit
+    initiated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    completed_at TIMESTAMP WITH TIME ZONE,
+    failed_at TIMESTAMP WITH TIME ZONE,
+    failure_reason TEXT,
+    
+    -- User context
+    created_by UUID NOT NULL,
+    updated_by UUID,
+    
+    -- Additional data
+    description TEXT,
+    metadata JSONB DEFAULT '{}'::jsonb,
+    
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    
+    -- Multi-tenant constraints
+    CONSTRAINT fk_split_payments_tenant FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
+    
+    -- Unique constraints scoped by tenant
+    CONSTRAINT unique_split_payment_reference_per_tenant UNIQUE (tenant_id, reference),
+    
+    -- Data integrity constraints
+    CONSTRAINT check_total_amount_positive CHECK (total_amount > 0),
+    CONSTRAINT check_currency_format CHECK (char_length(currency) = 3),
+    CONSTRAINT check_reference_format CHECK (reference ~ '^SPLIT_[A-Z0-9_]+$'),
+    CONSTRAINT check_completion_logic CHECK (
+      (status = 'completed' AND completed_at IS NOT NULL) OR
+      (status != 'completed' AND completed_at IS NULL)
+    ),
+    CONSTRAINT check_failure_logic CHECK (
+      (status = 'failed' AND failed_at IS NOT NULL) OR
+      (status != 'failed' AND failed_at IS NULL)
+    )
+  );
+`;
+
+// Split payment recipients/parties table - defines who gets what amount
+export const SPLIT_PAYMENT_RECIPIENTS_TABLE_SQL = `
+  CREATE TABLE IF NOT EXISTS split_payment_recipients (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    tenant_id UUID NOT NULL,
+    split_payment_id UUID NOT NULL,
+    
+    -- Recipient information
+    recipient_id VARCHAR(255) NOT NULL,
+    recipient_type VARCHAR(50) NOT NULL CHECK (recipient_type IN ('merchant', 'partner', 'platform', 'service_fee', 'tax', 'custom')),
+    recipient_name VARCHAR(255) NOT NULL,
+    recipient_email VARCHAR(255),
+    
+    -- Bank account details for direct transfers
+    bank_account_number VARCHAR(20),
+    bank_code VARCHAR(10),
+    bank_account_name VARCHAR(255),
+    
+    -- Split configuration
+    split_type VARCHAR(20) NOT NULL CHECK (split_type IN ('percentage', 'fixed_amount', 'remaining', 'commission')),
+    split_value DECIMAL(15,4) NOT NULL,
+    minimum_amount DECIMAL(15,2),
+    maximum_amount DECIMAL(15,2),
+    
+    -- Calculated amounts
+    calculated_amount DECIMAL(15,2) NOT NULL,
+    rounding_adjustment DECIMAL(10,4) DEFAULT 0,
+    
+    -- Payment tracking
+    payment_status VARCHAR(20) DEFAULT 'pending' CHECK (payment_status IN ('pending', 'processing', 'completed', 'failed', 'cancelled')),
+    gateway_subaccount_code VARCHAR(100),
+    settlement_reference VARCHAR(255),
+    settled_at TIMESTAMP WITH TIME ZONE,
+    settlement_amount DECIMAL(15,2),
+    
+    -- Additional data
+    description TEXT,
+    metadata JSONB DEFAULT '{}'::jsonb,
+    
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    
+    -- Multi-tenant constraints
+    CONSTRAINT fk_split_recipients_tenant FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
+    CONSTRAINT fk_split_recipients_payment FOREIGN KEY (split_payment_id) REFERENCES split_payments(id) ON DELETE CASCADE,
+    
+    -- Data integrity constraints
+    CONSTRAINT check_split_value_positive CHECK (split_value >= 0),
+    CONSTRAINT check_calculated_amount_positive CHECK (calculated_amount >= 0),
+    CONSTRAINT check_percentage_range CHECK (
+      split_type != 'percentage' OR (split_value >= 0 AND split_value <= 100)
+    ),
+    CONSTRAINT check_minimum_maximum_logic CHECK (
+      minimum_amount IS NULL OR maximum_amount IS NULL OR minimum_amount <= maximum_amount
+    ),
+    CONSTRAINT check_settlement_logic CHECK (
+      (payment_status = 'completed' AND settled_at IS NOT NULL) OR
+      (payment_status != 'completed' AND settled_at IS NULL)
+    )
+  );
+`;
+
+// Installment plans table - defines payment schedule structures
+export const INSTALLMENT_PLANS_TABLE_SQL = `
+  CREATE TABLE IF NOT EXISTS installment_plans (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    tenant_id UUID NOT NULL,
+    reference VARCHAR(100) NOT NULL,
+    
+    -- Plan details
+    total_amount DECIMAL(15,2) NOT NULL,
+    down_payment DECIMAL(15,2) DEFAULT 0,
+    financed_amount DECIMAL(15,2) NOT NULL,
+    currency VARCHAR(3) NOT NULL DEFAULT 'NGN',
+    
+    -- Schedule configuration
+    number_of_installments INTEGER NOT NULL CHECK (number_of_installments >= 2 AND number_of_installments <= 24),
+    payment_frequency VARCHAR(20) NOT NULL CHECK (payment_frequency IN ('weekly', 'bi_weekly', 'monthly', 'custom')),
+    frequency_days INTEGER NOT NULL,
+    
+    -- Interest and fees
+    interest_rate DECIMAL(5,4) DEFAULT 0 CHECK (interest_rate >= 0 AND interest_rate <= 0.5), -- Max 50% annually
+    late_fee_amount DECIMAL(10,2) DEFAULT 0,
+    late_fee_type VARCHAR(20) DEFAULT 'fixed' CHECK (late_fee_type IN ('fixed', 'percentage')),
+    early_payment_discount DECIMAL(5,4) DEFAULT 0 CHECK (early_payment_discount >= 0 AND early_payment_discount <= 1),
+    
+    -- Customer information
+    customer_id VARCHAR(255) NOT NULL,
+    customer_name VARCHAR(255),
+    customer_email VARCHAR(255),
+    customer_phone VARCHAR(50),
+    
+    -- Plan status and tracking
+    status VARCHAR(20) DEFAULT 'active' CHECK (status IN ('active', 'completed', 'cancelled', 'defaulted', 'suspended')),
+    start_date DATE NOT NULL,
+    first_payment_date DATE NOT NULL,
+    completion_date DATE,
+    
+    -- Payment tracking
+    total_paid_amount DECIMAL(15,2) DEFAULT 0,
+    remaining_balance DECIMAL(15,2),
+    next_payment_due_date DATE,
+    next_payment_amount DECIMAL(15,2),
+    overdue_amount DECIMAL(15,2) DEFAULT 0,
+    
+    -- User context
+    created_by UUID NOT NULL,
+    updated_by UUID,
+    
+    -- Additional data
+    description TEXT,
+    terms_and_conditions TEXT,
+    metadata JSONB DEFAULT '{}'::jsonb,
+    
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    
+    -- Multi-tenant constraints
+    CONSTRAINT fk_installment_plans_tenant FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
+    
+    -- Unique constraints scoped by tenant
+    CONSTRAINT unique_installment_plan_reference_per_tenant UNIQUE (tenant_id, reference),
+    
+    -- Data integrity constraints
+    CONSTRAINT check_amounts_positive CHECK (
+      total_amount > 0 AND down_payment >= 0 AND financed_amount > 0
+    ),
+    CONSTRAINT check_financed_amount_logic CHECK (financed_amount = total_amount - down_payment),
+    CONSTRAINT check_frequency_days_positive CHECK (frequency_days > 0),
+    CONSTRAINT check_currency_format CHECK (char_length(currency) = 3),
+    CONSTRAINT check_reference_format CHECK (reference ~ '^INST_[A-Z0-9_]+$'),
+    CONSTRAINT check_payment_tracking_logic CHECK (
+      total_paid_amount >= 0 AND 
+      remaining_balance >= 0 AND
+      overdue_amount >= 0 AND
+      total_paid_amount <= total_amount
+    ),
+    CONSTRAINT check_completion_logic CHECK (
+      (status = 'completed' AND completion_date IS NOT NULL) OR
+      (status != 'completed' AND completion_date IS NULL)
+    ),
+    CONSTRAINT check_date_logic CHECK (
+      first_payment_date >= start_date AND
+      (completion_date IS NULL OR completion_date >= start_date)
+    )
+  );
+`;
+
+// Installment schedules table - individual payment installments
+export const INSTALLMENT_SCHEDULES_TABLE_SQL = `
+  CREATE TABLE IF NOT EXISTS installment_schedules (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    tenant_id UUID NOT NULL,
+    installment_plan_id UUID NOT NULL,
+    
+    -- Schedule details
+    installment_number INTEGER NOT NULL,
+    due_date DATE NOT NULL,
+    
+    -- Amount breakdown
+    principal_amount DECIMAL(15,2) NOT NULL,
+    interest_amount DECIMAL(15,2) DEFAULT 0,
+    total_amount DECIMAL(15,2) NOT NULL,
+    late_fee_amount DECIMAL(15,2) DEFAULT 0,
+    
+    -- Payment status and tracking
+    status VARCHAR(20) DEFAULT 'pending' CHECK (status IN ('pending', 'paid', 'overdue', 'cancelled', 'partially_paid')),
+    paid_amount DECIMAL(15,2) DEFAULT 0,
+    remaining_amount DECIMAL(15,2),
+    
+    -- Payment details
+    paid_date TIMESTAMP WITH TIME ZONE,
+    payment_method VARCHAR(50),
+    payment_provider VARCHAR(50),
+    payment_reference VARCHAR(255),
+    gateway_reference VARCHAR(255),
+    
+    -- Late payment tracking
+    days_overdue INTEGER DEFAULT 0,
+    first_overdue_date DATE,
+    late_fees_applied DECIMAL(15,2) DEFAULT 0,
+    
+    -- Balance tracking
+    remaining_balance_after DECIMAL(15,2), -- Remaining balance after this payment
+    
+    -- Additional data
+    notes TEXT,
+    metadata JSONB DEFAULT '{}'::jsonb,
+    
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    
+    -- Multi-tenant constraints
+    CONSTRAINT fk_installment_schedules_tenant FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
+    CONSTRAINT fk_installment_schedules_plan FOREIGN KEY (installment_plan_id) REFERENCES installment_plans(id) ON DELETE CASCADE,
+    
+    -- Unique constraints scoped by tenant
+    CONSTRAINT unique_installment_number_per_plan UNIQUE (installment_plan_id, installment_number),
+    
+    -- Data integrity constraints
+    CONSTRAINT check_installment_number_positive CHECK (installment_number > 0),
+    CONSTRAINT check_amounts_non_negative CHECK (
+      principal_amount >= 0 AND 
+      interest_amount >= 0 AND 
+      total_amount >= 0 AND
+      late_fee_amount >= 0 AND
+      paid_amount >= 0 AND
+      late_fees_applied >= 0
+    ),
+    CONSTRAINT check_total_amount_calculation CHECK (total_amount = principal_amount + interest_amount + late_fee_amount),
+    CONSTRAINT check_remaining_amount_logic CHECK (remaining_amount = total_amount - paid_amount),
+    CONSTRAINT check_payment_logic CHECK (
+      (status IN ('paid', 'partially_paid') AND paid_date IS NOT NULL) OR
+      (status NOT IN ('paid', 'partially_paid') AND paid_date IS NULL)
+    ),
+    CONSTRAINT check_overdue_logic CHECK (
+      (status = 'overdue' AND days_overdue > 0) OR
+      (status != 'overdue' AND days_overdue = 0)
+    )
+  );
+`;
+
+// Layaway orders table - product reservation system
+export const LAYAWAY_ORDERS_TABLE_SQL = `
+  CREATE TABLE IF NOT EXISTS layaway_orders (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    tenant_id UUID NOT NULL,
+    reference VARCHAR(100) NOT NULL,
+    
+    -- Order details
+    total_amount DECIMAL(15,2) NOT NULL,
+    currency VARCHAR(3) NOT NULL DEFAULT 'NGN',
+    
+    -- Deposit requirements
+    required_deposit DECIMAL(15,2) NOT NULL,
+    deposit_percentage DECIMAL(5,2) NOT NULL CHECK (deposit_percentage >= 5 AND deposit_percentage <= 50),
+    minimum_deposit DECIMAL(15,2) NOT NULL,
+    
+    -- Customer and merchant information
+    customer_id VARCHAR(255) NOT NULL,
+    customer_name VARCHAR(255),
+    customer_email VARCHAR(255),
+    customer_phone VARCHAR(50),
+    merchant_id VARCHAR(255),
+    merchant_name VARCHAR(255),
+    
+    -- Layaway configuration
+    layaway_period_days INTEGER NOT NULL CHECK (layaway_period_days >= 7 AND layaway_period_days <= 365),
+    expiry_date DATE NOT NULL,
+    auto_renew BOOLEAN DEFAULT FALSE,
+    renewal_period_days INTEGER DEFAULT 30,
+    
+    -- Payment tracking
+    deposit_paid BOOLEAN DEFAULT FALSE,
+    deposit_paid_amount DECIMAL(15,2) DEFAULT 0,
+    total_paid_amount DECIMAL(15,2) DEFAULT 0,
+    remaining_amount DECIMAL(15,2),
+    
+    -- Status tracking
+    status VARCHAR(20) DEFAULT 'active' CHECK (status IN ('active', 'deposit_pending', 'in_progress', 'completed', 'expired', 'cancelled')),
+    
+    -- Important dates
+    deposit_due_date DATE,
+    completion_date TIMESTAMP WITH TIME ZONE,
+    expiry_notified_date DATE,
+    last_payment_date DATE,
+    
+    -- Reminder system
+    reminder_schedule JSONB DEFAULT '[14, 7, 3, 1]'::jsonb, -- Days before expiry to send reminders
+    reminders_sent JSONB DEFAULT '[]'::jsonb,
+    
+    -- Products data (denormalized for performance)
+    products_data JSONB NOT NULL, -- Array of product objects with id, name, price, quantity, sku, category
+    total_items INTEGER NOT NULL CHECK (total_items > 0),
+    
+    -- User context
+    created_by UUID NOT NULL,
+    updated_by UUID,
+    
+    -- Additional data
+    description TEXT,
+    special_instructions TEXT,
+    metadata JSONB DEFAULT '{}'::jsonb,
+    
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    
+    -- Multi-tenant constraints
+    CONSTRAINT fk_layaway_orders_tenant FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
+    
+    -- Unique constraints scoped by tenant
+    CONSTRAINT unique_layaway_order_reference_per_tenant UNIQUE (tenant_id, reference),
+    
+    -- Data integrity constraints
+    CONSTRAINT check_amounts_positive CHECK (
+      total_amount > 0 AND 
+      required_deposit > 0 AND 
+      minimum_deposit > 0 AND
+      deposit_paid_amount >= 0 AND
+      total_paid_amount >= 0
+    ),
+    CONSTRAINT check_deposit_logic CHECK (required_deposit >= minimum_deposit),
+    CONSTRAINT check_currency_format CHECK (char_length(currency) = 3),
+    CONSTRAINT check_reference_format CHECK (reference ~ '^LAY_[A-Z0-9_]+$'),
+    CONSTRAINT check_remaining_amount_logic CHECK (remaining_amount = total_amount - total_paid_amount),
+    CONSTRAINT check_deposit_status_logic CHECK (
+      (deposit_paid = TRUE AND deposit_paid_amount >= required_deposit) OR
+      (deposit_paid = FALSE AND deposit_paid_amount < required_deposit)
+    ),
+    CONSTRAINT check_completion_logic CHECK (
+      (status = 'completed' AND completion_date IS NOT NULL) OR
+      (status != 'completed' AND completion_date IS NULL)
+    ),
+    CONSTRAINT check_expiry_date_logic CHECK (expiry_date > CURRENT_DATE),
+    CONSTRAINT check_renewal_period_positive CHECK (
+      auto_renew = FALSE OR renewal_period_days > 0
+    )
+  );
+`;
+
+// Layaway payments table - tracks individual payments towards layaway orders
+export const LAYAWAY_PAYMENTS_TABLE_SQL = `
+  CREATE TABLE IF NOT EXISTS layaway_payments (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    tenant_id UUID NOT NULL,
+    layaway_order_id UUID NOT NULL,
+    
+    -- Payment details
+    payment_amount DECIMAL(15,2) NOT NULL,
+    currency VARCHAR(3) NOT NULL DEFAULT 'NGN',
+    payment_type VARCHAR(20) NOT NULL CHECK (payment_type IN ('deposit', 'installment', 'final_payment', 'additional')),
+    
+    -- Payment processing
+    payment_method VARCHAR(50) NOT NULL,
+    payment_provider VARCHAR(50) CHECK (payment_provider IN ('paystack', 'flutterwave', 'interswitch')),
+    payment_reference VARCHAR(255) NOT NULL,
+    gateway_reference VARCHAR(255),
+    
+    -- Status and tracking
+    status VARCHAR(20) DEFAULT 'pending' CHECK (status IN ('pending', 'processing', 'completed', 'failed', 'cancelled', 'refunded')),
+    processed_at TIMESTAMP WITH TIME ZONE,
+    failed_at TIMESTAMP WITH TIME ZONE,
+    failure_reason TEXT,
+    
+    -- Balance tracking
+    balance_before DECIMAL(15,2) NOT NULL,
+    balance_after DECIMAL(15,2) NOT NULL,
+    
+    -- Gateway response
+    gateway_response JSONB,
+    
+    -- User context
+    created_by UUID,
+    
+    -- Additional data
+    notes TEXT,
+    metadata JSONB DEFAULT '{}'::jsonb,
+    
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    
+    -- Multi-tenant constraints
+    CONSTRAINT fk_layaway_payments_tenant FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
+    CONSTRAINT fk_layaway_payments_order FOREIGN KEY (layaway_order_id) REFERENCES layaway_orders(id) ON DELETE CASCADE,
+    
+    -- Data integrity constraints
+    CONSTRAINT check_payment_amount_positive CHECK (payment_amount > 0),
+    CONSTRAINT check_currency_format CHECK (char_length(currency) = 3),
+    CONSTRAINT check_balance_logic CHECK (
+      balance_after = balance_before - payment_amount AND
+      balance_before >= 0 AND 
+      balance_after >= 0
+    ),
+    CONSTRAINT check_processing_logic CHECK (
+      (status = 'completed' AND processed_at IS NOT NULL) OR
+      (status = 'failed' AND failed_at IS NOT NULL) OR
+      (status NOT IN ('completed', 'failed'))
+    )
+  );
+`;
+
+// Multi-method payments table - combining multiple payment sources
+export const MULTI_METHOD_PAYMENTS_TABLE_SQL = `
+  CREATE TABLE IF NOT EXISTS multi_method_payments (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    tenant_id UUID NOT NULL,
+    reference VARCHAR(100) NOT NULL,
+    
+    -- Payment details
+    total_amount DECIMAL(15,2) NOT NULL,
+    currency VARCHAR(3) NOT NULL DEFAULT 'NGN',
+    
+    -- Customer information
+    customer_id VARCHAR(255) NOT NULL,
+    
+    -- Status tracking
+    status VARCHAR(20) DEFAULT 'initialized' CHECK (status IN ('initialized', 'in_progress', 'completed', 'failed', 'cancelled')),
+    
+    -- Method tracking
+    total_methods INTEGER NOT NULL CHECK (total_methods >= 2 AND total_methods <= 5),
+    completed_methods INTEGER DEFAULT 0,
+    failed_methods INTEGER DEFAULT 0,
+    
+    -- Amount tracking
+    total_processed_amount DECIMAL(15,2) DEFAULT 0,
+    remaining_amount DECIMAL(15,2),
+    
+    -- Timing
+    initiated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    completed_at TIMESTAMP WITH TIME ZONE,
+    failed_at TIMESTAMP WITH TIME ZONE,
+    timeout_at TIMESTAMP WITH TIME ZONE, -- Payment expires after this time
+    
+    -- User context
+    created_by UUID NOT NULL,
+    
+    -- Additional data
+    description TEXT,
+    metadata JSONB DEFAULT '{}'::jsonb,
+    
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    
+    -- Multi-tenant constraints
+    CONSTRAINT fk_multi_method_payments_tenant FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
+    
+    -- Unique constraints scoped by tenant
+    CONSTRAINT unique_multi_method_reference_per_tenant UNIQUE (tenant_id, reference),
+    
+    -- Data integrity constraints
+    CONSTRAINT check_total_amount_positive CHECK (total_amount > 0),
+    CONSTRAINT check_currency_format CHECK (char_length(currency) = 3),
+    CONSTRAINT check_reference_format CHECK (reference ~ '^MULTI_[A-Z0-9_]+$'),
+    CONSTRAINT check_method_counts CHECK (
+      completed_methods >= 0 AND 
+      failed_methods >= 0 AND
+      completed_methods + failed_methods <= total_methods
+    ),
+    CONSTRAINT check_amount_tracking CHECK (
+      total_processed_amount >= 0 AND
+      remaining_amount = total_amount - total_processed_amount
+    ),
+    CONSTRAINT check_completion_logic CHECK (
+      (status = 'completed' AND completed_at IS NOT NULL) OR
+      (status = 'failed' AND failed_at IS NOT NULL) OR
+      (status NOT IN ('completed', 'failed'))
+    )
+  );
+`;
+
+// Multi-method payment details table - individual payment methods
+export const MULTI_METHOD_PAYMENT_DETAILS_TABLE_SQL = `
+  CREATE TABLE IF NOT EXISTS multi_method_payment_details (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    tenant_id UUID NOT NULL,
+    multi_method_payment_id UUID NOT NULL,
+    
+    -- Method details
+    method_order INTEGER NOT NULL CHECK (method_order > 0),
+    payment_method VARCHAR(50) NOT NULL CHECK (payment_method IN ('card', 'bank', 'ussd', 'mobile_money', 'wallet', 'credit', 'points', 'gift_card')),
+    payment_provider VARCHAR(50),
+    
+    -- Amount and processing
+    allocated_amount DECIMAL(15,2) NOT NULL,
+    processed_amount DECIMAL(15,2) DEFAULT 0,
+    
+    -- Status tracking
+    status VARCHAR(20) DEFAULT 'pending' CHECK (status IN ('pending', 'processing', 'completed', 'failed', 'cancelled')),
+    
+    -- Payment processing details
+    payment_reference VARCHAR(255),
+    gateway_reference VARCHAR(255),
+    gateway_response JSONB,
+    
+    -- Account details (encrypted/tokenized)
+    account_details JSONB, -- Method-specific account information
+    
+    -- Timing
+    initiated_at TIMESTAMP WITH TIME ZONE,
+    completed_at TIMESTAMP WITH TIME ZONE,
+    failed_at TIMESTAMP WITH TIME ZONE,
+    failure_reason TEXT,
+    
+    -- Additional data
+    metadata JSONB DEFAULT '{}'::jsonb,
+    
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    
+    -- Multi-tenant constraints
+    CONSTRAINT fk_multi_method_details_tenant FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
+    CONSTRAINT fk_multi_method_details_payment FOREIGN KEY (multi_method_payment_id) REFERENCES multi_method_payments(id) ON DELETE CASCADE,
+    
+    -- Unique constraints
+    CONSTRAINT unique_method_order_per_payment UNIQUE (multi_method_payment_id, method_order),
+    
+    -- Data integrity constraints
+    CONSTRAINT check_allocated_amount_positive CHECK (allocated_amount > 0),
+    CONSTRAINT check_processed_amount_valid CHECK (processed_amount >= 0 AND processed_amount <= allocated_amount),
+    CONSTRAINT check_processing_logic CHECK (
+      (status = 'completed' AND completed_at IS NOT NULL AND processed_amount = allocated_amount) OR
+      (status = 'failed' AND failed_at IS NOT NULL) OR
+      (status NOT IN ('completed', 'failed'))
+    )
+  );
+`;
+
+// Payment audit logs table - comprehensive transaction logging for compliance
+export const PAYMENT_AUDIT_LOGS_TABLE_SQL = `
+  CREATE TABLE IF NOT EXISTS payment_audit_logs (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    tenant_id UUID NOT NULL,
+    
+    -- Event identification
+    event_type VARCHAR(50) NOT NULL CHECK (event_type IN (
+      'split_payment_created', 'split_payment_completed', 'split_payment_failed',
+      'installment_plan_created', 'installment_payment_made', 'installment_overdue',
+      'layaway_created', 'layaway_deposit_paid', 'layaway_completed', 'layaway_expired',
+      'multi_method_initiated', 'multi_method_completed',
+      'refund_processed', 'dispute_created', 'fraud_detected'
+    )),
+    event_category VARCHAR(30) NOT NULL CHECK (event_category IN ('split_payment', 'installment', 'layaway', 'multi_method', 'security', 'compliance')),
+    
+    -- Related entity references
+    entity_type VARCHAR(50), -- 'split_payment', 'installment_plan', 'layaway_order', etc.
+    entity_id UUID,
+    reference_number VARCHAR(100),
+    
+    -- User and session context
+    user_id UUID,
+    user_role VARCHAR(50),
+    session_id VARCHAR(255),
+    ip_address INET,
+    user_agent TEXT,
+    
+    -- Event details
+    event_description TEXT NOT NULL,
+    previous_state JSONB,
+    new_state JSONB,
+    state_changes JSONB,
+    
+    -- Amounts and financial data
+    amount_before DECIMAL(15,2),
+    amount_after DECIMAL(15,2),
+    amount_changed DECIMAL(15,2),
+    currency VARCHAR(3),
+    
+    -- Risk and compliance
+    risk_score INTEGER CHECK (risk_score >= 0 AND risk_score <= 100),
+    compliance_flags JSONB DEFAULT '[]'::jsonb,
+    requires_review BOOLEAN DEFAULT FALSE,
+    reviewed_by UUID,
+    reviewed_at TIMESTAMP WITH TIME ZONE,
+    
+    -- Additional context
+    gateway_provider VARCHAR(50),
+    gateway_reference VARCHAR(255),
+    external_reference VARCHAR(255),
+    correlation_id UUID, -- Links related events
+    
+    -- Metadata
+    metadata JSONB DEFAULT '{}'::jsonb,
+    
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    
+    -- Multi-tenant constraints
+    CONSTRAINT fk_payment_audit_logs_tenant FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
+    
+    -- Data integrity constraints
+    CONSTRAINT check_currency_format CHECK (currency IS NULL OR char_length(currency) = 3),
+    CONSTRAINT check_risk_score_range CHECK (risk_score IS NULL OR (risk_score >= 0 AND risk_score <= 100)),
+    CONSTRAINT check_amount_consistency CHECK (
+      (amount_before IS NULL AND amount_after IS NULL AND amount_changed IS NULL) OR
+      (amount_before IS NOT NULL AND amount_after IS NOT NULL AND amount_changed = amount_after - amount_before)
+    ),
+    CONSTRAINT check_review_logic CHECK (
+      (requires_review = FALSE) OR
+      (requires_review = TRUE AND (reviewed_by IS NULL OR reviewed_at IS NOT NULL))
+    )
+  );
+`;
+
+// Performance indexes for split payment tables
+export const SPLIT_PAYMENTS_INDEXES_SQL = `
+  -- Split payments indexes
+  CREATE INDEX IF NOT EXISTS idx_split_payments_tenant_id ON split_payments(tenant_id);
+  CREATE INDEX IF NOT EXISTS idx_split_payments_reference ON split_payments(tenant_id, reference);
+  CREATE INDEX IF NOT EXISTS idx_split_payments_status ON split_payments(tenant_id, status);
+  CREATE INDEX IF NOT EXISTS idx_split_payments_customer ON split_payments(tenant_id, customer_id);
+  CREATE INDEX IF NOT EXISTS idx_split_payments_provider ON split_payments(tenant_id, provider);
+  CREATE INDEX IF NOT EXISTS idx_split_payments_created_at ON split_payments(created_at);
+  CREATE INDEX IF NOT EXISTS idx_split_payments_completed_at ON split_payments(completed_at);
+  
+  -- Split payment recipients indexes
+  CREATE INDEX IF NOT EXISTS idx_split_recipients_tenant_id ON split_payment_recipients(tenant_id);
+  CREATE INDEX IF NOT EXISTS idx_split_recipients_payment_id ON split_payment_recipients(split_payment_id);
+  CREATE INDEX IF NOT EXISTS idx_split_recipients_recipient ON split_payment_recipients(tenant_id, recipient_id);
+  CREATE INDEX IF NOT EXISTS idx_split_recipients_type ON split_payment_recipients(tenant_id, recipient_type);
+  CREATE INDEX IF NOT EXISTS idx_split_recipients_status ON split_payment_recipients(payment_status);
+  
+  -- Installment plans indexes
+  CREATE INDEX IF NOT EXISTS idx_installment_plans_tenant_id ON installment_plans(tenant_id);
+  CREATE INDEX IF NOT EXISTS idx_installment_plans_reference ON installment_plans(tenant_id, reference);
+  CREATE INDEX IF NOT EXISTS idx_installment_plans_customer ON installment_plans(tenant_id, customer_id);
+  CREATE INDEX IF NOT EXISTS idx_installment_plans_status ON installment_plans(tenant_id, status);
+  CREATE INDEX IF NOT EXISTS idx_installment_plans_due_date ON installment_plans(next_payment_due_date);
+  CREATE INDEX IF NOT EXISTS idx_installment_plans_created_at ON installment_plans(created_at);
+  
+  -- Installment schedules indexes
+  CREATE INDEX IF NOT EXISTS idx_installment_schedules_tenant_id ON installment_schedules(tenant_id);
+  CREATE INDEX IF NOT EXISTS idx_installment_schedules_plan_id ON installment_schedules(installment_plan_id);
+  CREATE INDEX IF NOT EXISTS idx_installment_schedules_due_date ON installment_schedules(due_date);
+  CREATE INDEX IF NOT EXISTS idx_installment_schedules_status ON installment_schedules(status);
+  CREATE INDEX IF NOT EXISTS idx_installment_schedules_overdue ON installment_schedules(tenant_id, status, due_date) WHERE status = 'overdue';
+  
+  -- Layaway orders indexes
+  CREATE INDEX IF NOT EXISTS idx_layaway_orders_tenant_id ON layaway_orders(tenant_id);
+  CREATE INDEX IF NOT EXISTS idx_layaway_orders_reference ON layaway_orders(tenant_id, reference);
+  CREATE INDEX IF NOT EXISTS idx_layaway_orders_customer ON layaway_orders(tenant_id, customer_id);
+  CREATE INDEX IF NOT EXISTS idx_layaway_orders_status ON layaway_orders(tenant_id, status);
+  CREATE INDEX IF NOT EXISTS idx_layaway_orders_expiry ON layaway_orders(expiry_date);
+  CREATE INDEX IF NOT EXISTS idx_layaway_orders_created_at ON layaway_orders(created_at);
+  
+  -- Layaway payments indexes
+  CREATE INDEX IF NOT EXISTS idx_layaway_payments_tenant_id ON layaway_payments(tenant_id);
+  CREATE INDEX IF NOT EXISTS idx_layaway_payments_order_id ON layaway_payments(layaway_order_id);
+  CREATE INDEX IF NOT EXISTS idx_layaway_payments_status ON layaway_payments(status);
+  CREATE INDEX IF NOT EXISTS idx_layaway_payments_reference ON layaway_payments(payment_reference);
+  CREATE INDEX IF NOT EXISTS idx_layaway_payments_created_at ON layaway_payments(created_at);
+  
+  -- Multi-method payments indexes
+  CREATE INDEX IF NOT EXISTS idx_multi_method_payments_tenant_id ON multi_method_payments(tenant_id);
+  CREATE INDEX IF NOT EXISTS idx_multi_method_payments_reference ON multi_method_payments(tenant_id, reference);
+  CREATE INDEX IF NOT EXISTS idx_multi_method_payments_customer ON multi_method_payments(tenant_id, customer_id);
+  CREATE INDEX IF NOT EXISTS idx_multi_method_payments_status ON multi_method_payments(tenant_id, status);
+  CREATE INDEX IF NOT EXISTS idx_multi_method_payments_created_at ON multi_method_payments(created_at);
+  
+  -- Multi-method payment details indexes
+  CREATE INDEX IF NOT EXISTS idx_multi_method_details_tenant_id ON multi_method_payment_details(tenant_id);
+  CREATE INDEX IF NOT EXISTS idx_multi_method_details_payment_id ON multi_method_payment_details(multi_method_payment_id);
+  CREATE INDEX IF NOT EXISTS idx_multi_method_details_status ON multi_method_payment_details(status);
+  CREATE INDEX IF NOT EXISTS idx_multi_method_details_method ON multi_method_payment_details(payment_method);
+  
+  -- Payment audit logs indexes
+  CREATE INDEX IF NOT EXISTS idx_payment_audit_logs_tenant_id ON payment_audit_logs(tenant_id);
+  CREATE INDEX IF NOT EXISTS idx_payment_audit_logs_event_type ON payment_audit_logs(tenant_id, event_type);
+  CREATE INDEX IF NOT EXISTS idx_payment_audit_logs_entity ON payment_audit_logs(entity_type, entity_id);
+  CREATE INDEX IF NOT EXISTS idx_payment_audit_logs_user ON payment_audit_logs(tenant_id, user_id);
+  CREATE INDEX IF NOT EXISTS idx_payment_audit_logs_created_at ON payment_audit_logs(created_at);
+  CREATE INDEX IF NOT EXISTS idx_payment_audit_logs_requires_review ON payment_audit_logs(tenant_id, requires_review) WHERE requires_review = TRUE;
+  CREATE INDEX IF NOT EXISTS idx_payment_audit_logs_correlation ON payment_audit_logs(correlation_id) WHERE correlation_id IS NOT NULL;
+`;
+
+// Triggers for automatic updated_at timestamp updates
+export const SPLIT_PAYMENT_TRIGGERS_SQL = `
+  -- Split payments triggers
+  DROP TRIGGER IF EXISTS trigger_update_split_payments_updated_at ON split_payments;
+  CREATE TRIGGER trigger_update_split_payments_updated_at
+    BEFORE UPDATE ON split_payments
+    FOR EACH ROW
+    EXECUTE FUNCTION update_updated_at_column();
+
+  DROP TRIGGER IF EXISTS trigger_update_split_recipients_updated_at ON split_payment_recipients;
+  CREATE TRIGGER trigger_update_split_recipients_updated_at
+    BEFORE UPDATE ON split_payment_recipients
+    FOR EACH ROW
+    EXECUTE FUNCTION update_updated_at_column();
+
+  DROP TRIGGER IF EXISTS trigger_update_installment_plans_updated_at ON installment_plans;
+  CREATE TRIGGER trigger_update_installment_plans_updated_at
+    BEFORE UPDATE ON installment_plans
+    FOR EACH ROW
+    EXECUTE FUNCTION update_updated_at_column();
+
+  DROP TRIGGER IF EXISTS trigger_update_installment_schedules_updated_at ON installment_schedules;
+  CREATE TRIGGER trigger_update_installment_schedules_updated_at
+    BEFORE UPDATE ON installment_schedules
+    FOR EACH ROW
+    EXECUTE FUNCTION update_updated_at_column();
+
+  DROP TRIGGER IF EXISTS trigger_update_layaway_orders_updated_at ON layaway_orders;
+  CREATE TRIGGER trigger_update_layaway_orders_updated_at
+    BEFORE UPDATE ON layaway_orders
+    FOR EACH ROW
+    EXECUTE FUNCTION update_updated_at_column();
+
+  DROP TRIGGER IF EXISTS trigger_update_layaway_payments_updated_at ON layaway_payments;
+  CREATE TRIGGER trigger_update_layaway_payments_updated_at
+    BEFORE UPDATE ON layaway_payments
+    FOR EACH ROW
+    EXECUTE FUNCTION update_updated_at_column();
+
+  DROP TRIGGER IF EXISTS trigger_update_multi_method_payments_updated_at ON multi_method_payments;
+  CREATE TRIGGER trigger_update_multi_method_payments_updated_at
+    BEFORE UPDATE ON multi_method_payments
+    FOR EACH ROW
+    EXECUTE FUNCTION update_updated_at_column();
+
+  DROP TRIGGER IF EXISTS trigger_update_multi_method_details_updated_at ON multi_method_payment_details;
+  CREATE TRIGGER trigger_update_multi_method_details_updated_at
+    BEFORE UPDATE ON multi_method_payment_details
+    FOR EACH ROW
+    EXECUTE FUNCTION update_updated_at_column();
+`;
