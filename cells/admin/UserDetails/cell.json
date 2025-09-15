@@ -1,0 +1,59 @@
+{
+  "id": "admin/UserDetails",
+  "name": "UserDetails",
+  "sector": "admin",
+  "version": "1.0.0",
+  "description": "Comprehensive user detail management with profile editing, activity tracking, and permission management",
+  "channels": ["stable", "canary"],
+  "inputs": {
+    "renderUserProfile": {
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "userData": {
+          "type": "object",
+          "properties": {
+            "id": { "type": "string" },
+            "name": { "type": "string" },
+            "email": { "type": "string" },
+            "role": { "type": "string" },
+            "status": { "type": "string" },
+            "invitedBy": { "type": "string" },
+            "createdAt": { "type": "number" },
+            "lastLogin": { "type": "number" }
+          }
+        }
+      },
+      "required": ["userId", "userData"]
+    },
+    "updateUserProfile": {
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "updates": { "type": "object" }
+      },
+      "required": ["userId", "updates"]
+    }
+  },
+  "outputs": {
+    "renderUserProfile": {
+      "type": "object",
+      "properties": {
+        "component": { "type": "string" },
+        "activities": { "type": "array" },
+        "permissions": { "type": "array" }
+      }
+    },
+    "updateUserProfile": {
+      "type": "object",
+      "properties": {
+        "success": { "type": "boolean" },
+        "message": { "type": "string" }
+      }
+    }
+  },
+  "actions": ["renderUserProfile", "updateUserProfile", "getUserActivity", "updatePermissions"],
+  "dependencies": [],
+  "created": "2025-01-16T00:00:00Z",
+  "updated": "2025-01-16T00:00:00Z"
+}

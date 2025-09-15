@@ -1,0 +1,50 @@
+{
+  "id": "admin/TenantFeatureToggle",
+  "name": "TenantFeatureToggle",
+  "sector": "admin",
+  "version": "1.0.0",
+  "description": "Granular feature toggle management for tenants with real-time activation and custom configurations",
+  "channels": ["stable", "canary"],
+  "inputs": {
+    "renderFeatureManager": {
+      "type": "object",
+      "properties": {
+        "tenantId": { "type": "string" },
+        "currentFeatures": { "type": "array" },
+        "availableFeatures": { "type": "array" }
+      },
+      "required": ["tenantId"]
+    },
+    "toggleFeature": {
+      "type": "object",
+      "properties": {
+        "tenantId": { "type": "string" },
+        "featureId": { "type": "string" },
+        "enabled": { "type": "boolean" },
+        "config": { "type": "object" }
+      },
+      "required": ["tenantId", "featureId", "enabled"]
+    }
+  },
+  "outputs": {
+    "renderFeatureManager": {
+      "type": "object",
+      "properties": {
+        "component": { "type": "string" },
+        "features": { "type": "array" }
+      }
+    },
+    "toggleFeature": {
+      "type": "object",
+      "properties": {
+        "success": { "type": "boolean" },
+        "message": { "type": "string" },
+        "updatedFeatures": { "type": "array" }
+      }
+    }
+  },
+  "actions": ["renderFeatureManager", "toggleFeature", "getFeatureTemplates", "applyFeatureTemplate"],
+  "dependencies": [],
+  "created": "2025-01-16T00:00:00Z",
+  "updated": "2025-01-16T00:00:00Z"
+}

@@ -1,0 +1,66 @@
+{
+  "id": "admin/TenantDetails",
+  "name": "TenantDetails",
+  "sector": "admin",
+  "version": "1.0.0",
+  "description": "Comprehensive tenant detail management with usage statistics, subscription history, and configuration options",
+  "channels": ["stable", "canary"],
+  "inputs": {
+    "renderDetails": {
+      "type": "object",
+      "properties": {
+        "tenantId": { "type": "string" },
+        "tenantData": {
+          "type": "object",
+          "properties": {
+            "subdomain": { "type": "string" },
+            "tenantName": { "type": "string" },
+            "emoji": { "type": "string" },
+            "subscriptionPlan": { "type": "string" },
+            "status": { "type": "string" },
+            "createdAt": { "type": "number" },
+            "lastActive": { "type": "number" },
+            "features": { "type": "array" }
+          }
+        }
+      },
+      "required": ["tenantId", "tenantData"]
+    },
+    "updateTenantConfig": {
+      "type": "object",
+      "properties": {
+        "tenantId": { "type": "string" },
+        "updates": { "type": "object" }
+      },
+      "required": ["tenantId", "updates"]
+    }
+  },
+  "outputs": {
+    "renderDetails": {
+      "type": "object",
+      "properties": {
+        "component": { "type": "string" },
+        "stats": {
+          "type": "object",
+          "properties": {
+            "totalUsers": { "type": "number" },
+            "activeUsers": { "type": "number" },
+            "storageUsed": { "type": "number" },
+            "apiCalls": { "type": "number" }
+          }
+        }
+      }
+    },
+    "updateTenantConfig": {
+      "type": "object",
+      "properties": {
+        "success": { "type": "boolean" },
+        "message": { "type": "string" }
+      }
+    }
+  },
+  "actions": ["renderDetails", "updateTenantConfig", "getTenantStats", "getTenantHistory"],
+  "dependencies": [],
+  "created": "2025-01-16T00:00:00Z",
+  "updated": "2025-01-16T00:00:00Z"
+}
