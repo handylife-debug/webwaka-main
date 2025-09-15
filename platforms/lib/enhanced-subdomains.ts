@@ -69,7 +69,8 @@ export async function getEnhancedSubdomainData(subdomain: string): Promise<Enhan
 export async function getAllEnhancedSubdomains(): Promise<EnhancedTenant[]> {
   return await safeRedisOperation(
     async () => {
-      const keys = await redis.list('subdomain:');
+      const keysResult = await redis.list('subdomain:');
+      const keys = Array.isArray(keysResult) ? keysResult : [];
 
       if (!keys.length) {
         return [];
@@ -94,10 +95,9 @@ export async function getAllEnhancedSubdomains(): Promise<EnhancedTenant[]> {
         features: data?.features || [],
       };
     });
-  } catch (error) {
-    console.error('Redis connection error in getAllEnhancedSubdomains:', error);
-    return [];
-  }
+    },
+    []
+  );
 }
 
 export async function updateTenantStatus(subdomain: string, status: TenantStatus): Promise<boolean> {
