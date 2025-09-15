@@ -45,6 +45,44 @@ export {
 // SDK utilities
 export * from './utils/cell-utils';
 
+// Production Registry
+export {
+  ProductionCellRegistry,
+  productionRegistry
+} from './registry/production-registry';
+
+// Channel Management
+export {
+  ChannelManager,
+  channelManager,
+  type ChannelAdvancementPolicy,
+  type VersionPin,
+  type ChannelAdvancement,
+  type AdvancementResult
+} from './management/channel-manager';
+
+// Cell Scaffolding
+export {
+  CellGenerator,
+  cellGenerator,
+  type CellGenerationOptions,
+  type CellConversionOptions,
+  type CellBuildResult,
+  type CellCandidate
+} from './scaffolding/cell-generator';
+
+// Tissue & Organ Composition
+export {
+  TissueOrchestrator,
+  tissueOrchestrator,
+  type TissueDefinition,
+  type TissueStep,
+  type OrganDefinition,
+  type TissueExecutionResult,
+  type OrganExecutionResult,
+  type TissueHealthStatus
+} from './composition/tissue-orchestrator';
+
 // Version and metadata
 export const CELL_SDK_VERSION = '1.0.0';
 export const WEBWAKA_PROTOCOL_VERSION = '1.0.0';
