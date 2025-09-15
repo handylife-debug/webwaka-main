@@ -21,6 +21,7 @@
     "@vercel/speed-insights": "^1.2.0",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
+    "commander": "^14.0.1",
     "frimousse": "^0.2.0",
     "lucide-react": "^0.510.0",
     "next": "15.3.2",

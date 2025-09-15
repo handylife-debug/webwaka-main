@@ -27,7 +27,7 @@ generateCommand
   .option('-v, --version <version>', 'Cell version', '1.0.0')
   .option('-a, --actions <actions>', 'Comma-separated list of actions', 'process')
   .option('-d, --description <description>', 'Cell description')
-  .action(async (options) => {
+  .action(async (options: any) => {
     try {
       const actions = options.actions.split(',').map((a: string) => a.trim());
       
@@ -57,7 +57,7 @@ generateCommand
   .requiredOption('-i, --id <id>', 'Tissue ID')
   .requiredOption('-n, --name <name>', 'Tissue name')
   .option('-d, --description <description>', 'Tissue description')
-  .action(async (options) => {
+  .action(async (options: any) => {
     try {
       const tissueTemplate = {
         id: options.id,
@@ -98,7 +98,7 @@ convertCommand
   .command('scan')
   .description('Scan project for Cell conversion candidates')
   .option('-d, --dir <directory>', 'Directory to scan', '.')
-  .action(async (options) => {
+  .action(async (options: any) => {
     try {
       const candidates = await cellGenerator.scanForCellCandidates(options.dir);
       
@@ -131,7 +131,7 @@ convertCommand
   .requiredOption('-s, --sector <sector>', 'Target sector')
   .requiredOption('-n, --name <name>', 'Target Cell name')
   .option('-t, --type <type>', 'Component type', 'react-component')
-  .action(async (options) => {
+  .action(async (options: any) => {
     try {
       const cellDir = await cellGenerator.convertToCell({
         sourcePath: options.file,
@@ -153,7 +153,7 @@ program
   .command('build')
   .description('Build Cell artifacts for deployment')
   .argument('<cellDir>', 'Cell directory to build')
-  .action(async (cellDir) => {
+  .action(async (cellDir: string) => {
     try {
       const result = await cellGenerator.buildCell(cellDir);
       
@@ -183,7 +183,7 @@ registryCommand
   .description('Publish Cell to registry')
   .argument('<cellDir>', 'Cell directory to publish')
   .option('-c, --channel <channel>', 'Target channel', 'canary')
-  .action(async (cellDir, options) => {
+  .action(async (cellDir: string, options: any) => {
     try {
       // Build Cell first
       const buildResult = await cellGenerator.buildCell(cellDir);
@@ -193,7 +193,10 @@ registryCommand
       const manifest = JSON.parse(await fs.readFile(manifestPath, 'utf-8'));
       
       // Register in production registry
-      await productionRegistry.registerCell(manifest, buildResult.artifacts);
+      await productionRegistry.registerCell(manifest, {
+        ...buildResult.artifacts,
+        schema: buildResult.artifacts.schema || {}
+      });
       
       console.log(`✅ Published Cell ${buildResult.cellId} v${buildResult.version} to registry`);
       console.log(`   Available on channel: ${options.channel}`);
@@ -209,7 +212,7 @@ registryCommand
   .requiredOption('--cell <cellId>', 'Cell ID (sector/name)')
   .requiredOption('--from <channel>', 'Source channel')
   .requiredOption('--to <channel>', 'Target channel')
-  .action(async (options) => {
+  .action(async (options: any) => {
     try {
       // Get current version from source channel
       const entry = await productionRegistry.resolveCell(options.cell, options.from);
@@ -230,7 +233,7 @@ registryCommand
   .command('list')
   .description('List Cells in registry')
   .option('-s, --sector <sector>', 'Filter by sector')
-  .action(async (options) => {
+  .action(async (options: any) => {
     try {
       if (options.sector) {
         const cells = await productionRegistry.listCellsBySector(options.sector);
@@ -252,7 +255,7 @@ tissueCommand
   .command('register')
   .description('Register a Tissue composition')
   .argument('<tissueFile>', 'Tissue definition file (tissue.json)')
-  .action(async (tissueFile) => {
+  .action(async (tissueFile: string) => {
     try {
       const tissueDefinition = JSON.parse(await fs.readFile(tissueFile, 'utf-8'));
       await tissueOrchestrator.registerTissue(tissueDefinition);
@@ -270,7 +273,7 @@ tissueCommand
   .description('Execute a Tissue composition')
   .requiredOption('--tissue <tissueId>', 'Tissue ID to execute')
   .option('--input <json>', 'Input data as JSON string', '{}')
-  .action(async (options) => {
+  .action(async (options: any) => {
     try {
       const input = JSON.parse(options.input);
       const result = await tissueOrchestrator.executeTissue(options.tissue, input);
@@ -288,7 +291,7 @@ tissueCommand
   .command('health')
   .description('Check Tissue health')
   .requiredOption('--tissue <tissueId>', 'Tissue ID to check')
-  .action(async (options) => {
+  .action(async (options: any) => {
     try {
       const health = await tissueOrchestrator.getTissueHealth(options.tissue);
       
@@ -324,11 +327,15 @@ program
       if (compositions.tissues.length > 0) {
         console.log('\n🦠 Active Tissues:');
         for (const tissueId of compositions.tissues) {
-          const health = await tissueOrchestrator.getTissueHealth(tissueId);
-          const statusIcon = health.status === 'healthy' ? '✅' : 
-                            health.status === 'degraded' ? '⚠️' : 
-                            health.status === 'failed' ? '❌' : '❓';
-          console.log(`   ${statusIcon} ${tissueId} - ${health.status}`);
+          try {
+            const health = await tissueOrchestrator.getTissueHealth(tissueId);
+            const statusIcon = health.status === 'healthy' ? '✅' : 
+                              health.status === 'degraded' ? '⚠️' : 
+                              health.status === 'failed' ? '❌' : '❓';
+            console.log(`   ${statusIcon} ${tissueId} - ${health.status}`);
+          } catch (error) {
+            console.log(`   ❓ ${tissueId} - unknown (error checking health)`);
+          }
         }
       }
       
@@ -343,6 +350,6 @@ program
   });
 
 // Parse command line arguments
-program.parse();
+program.parse(process.argv);
 
 export { program };

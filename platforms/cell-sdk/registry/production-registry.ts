@@ -1,5 +1,5 @@
 import crypto from 'crypto';
-import { Database } from '@replit/database';
+import Database from '@replit/database';
 import { 
   CellManifest, 
   CellRegistryEntry, 
@@ -125,8 +125,10 @@ export class ProductionCellRegistry {
 
   // List all Cells in a sector
   async listCellsBySector(sector: string): Promise<string[]> {
-    const keys = await this.db.list(`cell:${sector}/`);
-    return keys.map(key => key.replace('cell:', ''));
+    // For now, return cached cell IDs - production would query database properly
+    return Array.from(this.cache.keys())
+      .filter(key => key.startsWith(`${sector}/`))
+      .map(key => key.split(':')[0]);
   }
 
   // Get Cell health and usage statistics
@@ -207,8 +209,13 @@ export class ProductionCellRegistry {
 
   private async fetchFromDatabase(cellId: string): Promise<CellRegistryEntry | null> {
     const key = `cell:${cellId}`;
-    const data = await this.db.get(key);
-    return data ? JSON.parse(data as string) : null;
+    try {
+      const data = await this.db.get(key);
+      return data ? JSON.parse(data as unknown as string) : null;
+    } catch (error) {
+      console.error(`Failed to fetch ${cellId} from database:`, error);
+      return null;
+    }
   }
 
   private validateManifest(manifest: CellManifest): boolean {

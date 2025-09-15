@@ -36,7 +36,7 @@ export {
 
 // React components
 export {
-  Cell,
+  Cell as CellComponent,
   type CellProps,
   useCellAction,
   preloadCell
