@@ -1,10 +1,12 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { ShoppingCart, Search, Menu, CreditCard, DollarSign, Package, Users, BarChart3, Minus, Plus, X } from 'lucide-react'
+import { ShoppingCart, Search, Menu, CreditCard, DollarSign, Package, Users, BarChart3, Minus, Plus, X, History } from 'lucide-react'
 import TransactionProcessingCell, { PaymentResult, SplitPayment, DraftSale } from './components/TransactionProcessingCell'
 import PromotionsCell, { AppliedPromotion } from './components/PromotionsCell'
 import TaxAndFeeCell, { TaxCalculation, FeeCalculation } from './components/TaxAndFeeCell'
+import TransactionHistoryCell from './components/TransactionHistoryCell'
+import InventoryManagerCell from './components/InventoryManagerCell'
 import { OfflineProvider, useOffline, OfflineStatusIndicator } from './components/OfflineTissue'
 
 interface Product {
@@ -44,6 +46,8 @@ function POSMain() {
   const [showDraftSales, setShowDraftSales] = useState(false)
   const [showPromotions, setShowPromotions] = useState(false)
   const [showTaxAndFees, setShowTaxAndFees] = useState(false)
+  const [showTransactionHistory, setShowTransactionHistory] = useState(false)
+  const [showInventoryManager, setShowInventoryManager] = useState(false)
   const [isLoading, setIsLoading] = useState(true)
   
   // Promotions and Tax state
@@ -395,6 +399,22 @@ function POSMain() {
           >
             <Package className="w-4 h-4 mr-1" />
             Drafts ({draftSales.length})
+          </button>
+
+          <button
+            onClick={() => setShowTransactionHistory(true)}
+            className="px-3 py-2 bg-purple-600 text-white rounded-lg font-medium hover:bg-purple-700 transition-colors flex items-center text-sm"
+          >
+            <History className="w-4 h-4 mr-1" />
+            History
+          </button>
+
+          <button
+            onClick={() => setShowInventoryManager(true)}
+            className="px-3 py-2 bg-indigo-600 text-white rounded-lg font-medium hover:bg-indigo-700 transition-colors flex items-center text-sm"
+          >
+            <Package className="w-4 h-4 mr-1" />
+            Inventory
           </button>
           
           <button
@@ -967,6 +987,26 @@ function POSMain() {
         onTaxAndFeesCalculated={handleTaxAndFeesCalculated}
         isVisible={showTaxAndFees}
         onClose={() => setShowTaxAndFees(false)}
+      />
+
+      {/* Transaction History */}
+      <TransactionHistoryCell
+        isVisible={showTransactionHistory}
+        onClose={() => setShowTransactionHistory(false)}
+      />
+
+      {/* Inventory Manager */}
+      <InventoryManagerCell
+        isVisible={showInventoryManager}
+        onClose={() => setShowInventoryManager(false)}
+        onStockUpdate={(itemId, newStock) => {
+          // Update product stock in local state
+          setProducts(prev => prev.map(product => 
+            product.id === itemId 
+              ? { ...product, stock: newStock }
+              : product
+          ))
+        }}
       />
     </div>
   )

@@ -8,6 +8,7 @@ export interface PaymentProvider {
   name: string
   type: 'card' | 'mobile' | 'cash' | 'gift_card'
   process: (amount: number, metadata?: any) => Promise<PaymentResult>
+  refund?: (transactionId: string, amount: number, reason?: string) => Promise<PaymentResult>
   validate?: (data: any) => boolean
 }
 
@@ -17,6 +18,8 @@ export interface PaymentResult {
   reference?: string
   message: string
   fee?: number
+  refundable?: boolean
+  refundTransactionId?: string
 }
 
 export interface CartItem {
@@ -72,7 +75,8 @@ class PaystackProvider implements PaymentProvider {
           transactionId: `ps_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
           reference: `REF_${Date.now()}`,
           message: 'Payment processed successfully via Paystack',
-          fee: amount * 0.015 // 1.5% transaction fee
+          fee: amount * 0.015, // 1.5% transaction fee
+          refundable: true
         }
       } else {
         return {
@@ -84,6 +88,34 @@ class PaystackProvider implements PaymentProvider {
       return {
         success: false,
         message: 'Payment processing failed'
+      }
+    }
+  }
+
+  async refund(transactionId: string, amount: number, reason?: string): Promise<PaymentResult> {
+    try {
+      await new Promise(resolve => setTimeout(resolve, 1500))
+      
+      const success = Math.random() > 0.05 // 95% success rate for refunds
+      
+      if (success) {
+        return {
+          success: true,
+          transactionId: `ps_refund_${Date.now()}`,
+          reference: `REF_REFUND_${Date.now()}`,
+          message: `Refund of $${amount.toFixed(2)} processed successfully via Paystack`,
+          refundTransactionId: transactionId
+        }
+      } else {
+        return {
+          success: false,
+          message: 'Refund processing failed'
+        }
+      }
+    } catch (error) {
+      return {
+        success: false,
+        message: 'Refund processing error'
       }
     }
   }
@@ -106,7 +138,8 @@ class MobileWalletProvider implements PaymentProvider {
           transactionId: `mw_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
           reference: `MW_${Date.now()}`,
           message: 'Payment completed via Mobile Wallet',
-          fee: amount * 0.01 // 1% transaction fee
+          fee: amount * 0.01, // 1% transaction fee
+          refundable: true
         }
       } else {
         return {
@@ -118,6 +151,34 @@ class MobileWalletProvider implements PaymentProvider {
       return {
         success: false,
         message: 'Mobile wallet processing failed'
+      }
+    }
+  }
+
+  async refund(transactionId: string, amount: number, reason?: string): Promise<PaymentResult> {
+    try {
+      await new Promise(resolve => setTimeout(resolve, 1000))
+      
+      const success = Math.random() > 0.03 // 97% success rate for mobile wallet refunds
+      
+      if (success) {
+        return {
+          success: true,
+          transactionId: `mw_refund_${Date.now()}`,
+          reference: `MW_REFUND_${Date.now()}`,
+          message: `Mobile wallet refund of $${amount.toFixed(2)} processed successfully`,
+          refundTransactionId: transactionId
+        }
+      } else {
+        return {
+          success: false,
+          message: 'Mobile wallet refund failed'
+        }
+      }
+    } catch (error) {
+      return {
+        success: false,
+        message: 'Mobile wallet refund processing error'
       }
     }
   }
@@ -134,7 +195,18 @@ class CashProvider implements PaymentProvider {
       transactionId: `cash_${Date.now()}`,
       reference: `CASH_${Date.now()}`,
       message: 'Cash payment received',
-      fee: 0
+      fee: 0,
+      refundable: true
+    }
+  }
+
+  async refund(transactionId: string, amount: number, reason?: string): Promise<PaymentResult> {
+    return {
+      success: true,
+      transactionId: `cash_refund_${Date.now()}`,
+      reference: `CASH_REFUND_${Date.now()}`,
+      message: `Cash refund of $${amount.toFixed(2)} processed`,
+      refundTransactionId: transactionId
     }
   }
 }
@@ -171,7 +243,8 @@ class GiftCardProvider implements PaymentProvider {
       transactionId: `gc_${Date.now()}`,
       reference: `GC_${Date.now()}`,
       message: 'Gift card payment processed',
-      fee: 0
+      fee: 0,
+      refundable: false // Gift cards typically non-refundable
     }
   }
 }
