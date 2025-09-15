@@ -1,0 +1,511 @@
+{
+  "id": "sales/SalesEngine",
+  "name": "SalesEngine",
+  "sector": "sales",
+  "version": "1.0.0",
+  "description": "Enterprise-grade POS sales transaction processing cell for Nigerian businesses with offline-first capabilities, multi-payment support, VAT compliance, and real-time inventory integration",
+  "channels": ["stable", "canary"],
+  "type": "cross-cutting",
+  "category": "CC-005.1",
+  "tags": ["sales", "pos", "transactions", "nigerian", "vat", "offline", "multi-payment", "enterprise", "cross-cutting"],
+  "inputs": {
+    "initializeCart": {
+      "type": "object",
+      "properties": {
+        "sessionId": { "type": "string", "format": "uuid" },
+        "cashierId": { "type": "string", "format": "uuid" },
+        "locationId": { "type": "string", "format": "uuid" },
+        "terminalId": { "type": "string", "maxLength": 100 },
+        "customerId": { "type": "string", "format": "uuid" },
+        "currency": { "type": "string", "enum": ["NGN", "USD", "GBP"], "default": "NGN" }
+      },
+      "required": ["sessionId", "cashierId"]
+    },
+    "addToCart": {
+      "type": "object",
+      "properties": {
+        "sessionId": { "type": "string", "format": "uuid" },
+        "productId": { "type": "string", "format": "uuid" },
+        "variantId": { "type": "string", "format": "uuid" },
+        "quantity": { "type": "number", "minimum": 0.01 },
+        "unitPrice": { "type": "number", "minimum": 0 },
+        "overridePrice": { "type": "boolean", "default": false },
+        "discountId": { "type": "string", "format": "uuid" },
+        "notes": { "type": "string", "maxLength": 500 }
+      },
+      "required": ["sessionId", "productId", "quantity"]
+    },
+    "updateCartItem": {
+      "type": "object",
+      "properties": {
+        "sessionId": { "type": "string", "format": "uuid" },
+        "cartItemId": { "type": "string", "format": "uuid" },
+        "quantity": { "type": "number", "minimum": 0 },
+        "unitPrice": { "type": "number", "minimum": 0 },
+        "discountId": { "type": "string", "format": "uuid" },
+        "notes": { "type": "string", "maxLength": 500 }
+      },
+      "required": ["sessionId", "cartItemId"]
+    },
+    "removeFromCart": {
+      "type": "object",
+      "properties": {
+        "sessionId": { "type": "string", "format": "uuid" },
+        "cartItemId": { "type": "string", "format": "uuid" }
+      },
+      "required": ["sessionId", "cartItemId"]
+    },
+    "applyDiscount": {
+      "type": "object",
+      "properties": {
+        "sessionId": { "type": "string", "format": "uuid" },
+        "discountType": { "type": "string", "enum": ["percentage", "fixed_amount", "product_specific", "category", "customer_tier"] },
+        "discountValue": { "type": "number", "minimum": 0 },
+        "discountCode": { "type": "string", "maxLength": 50 },
+        "targetProductIds": { "type": "array", "items": { "type": "string", "format": "uuid" } },
+        "minimumPurchase": { "type": "number", "minimum": 0 },
+        "maximumDiscount": { "type": "number", "minimum": 0 }
+      },
+      "required": ["sessionId", "discountType", "discountValue"]
+    },
+    "calculateTax": {
+      "type": "object",
+      "properties": {
+        "sessionId": { "type": "string", "format": "uuid" },
+        "taxableAmount": { "type": "number", "minimum": 0 },
+        "customerType": { "type": "string", "enum": ["individual", "business", "corporate", "government"] },
+        "exemptions": { "type": "array", "items": { "type": "string" } },
+        "region": { "type": "string", "default": "Nigeria" }
+      },
+      "required": ["sessionId", "taxableAmount"]
+    },
+    "processPayment": {
+      "type": "object",
+      "properties": {
+        "sessionId": { "type": "string", "format": "uuid" },
+        "paymentMethods": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "method": { "type": "string", "enum": ["cash", "card", "mobile_money", "bank_transfer", "split_payment"] },
+              "amount": { "type": "number", "minimum": 0.01 },
+              "provider": { "type": "string", "enum": ["paystack", "flutterwave", "interswitch", "cash"] },
+              "reference": { "type": "string", "maxLength": 255 },
+              "metadata": { "type": "object" }
+            },
+            "required": ["method", "amount"]
+          }
+        },
+        "customerInfo": {
+          "type": "object",
+          "properties": {
+            "name": { "type": "string", "maxLength": 255 },
+            "phone": { "type": "string", "maxLength": 20 },
+            "email": { "type": "string", "format": "email" },
+            "address": { "type": "string", "maxLength": 500 }
+          }
+        },
+        "receiptPreferences": {
+          "type": "object",
+          "properties": {
+            "printReceipt": { "type": "boolean", "default": true },
+            "emailReceipt": { "type": "boolean", "default": false },
+            "smsReceipt": { "type": "boolean", "default": false },
+            "language": { "type": "string", "enum": ["en", "ha", "yo", "ig"], "default": "en" }
+          }
+        }
+      },
+      "required": ["sessionId", "paymentMethods"]
+    },
+    "processRefund": {
+      "type": "object",
+      "properties": {
+        "transactionId": { "type": "string", "format": "uuid" },
+        "refundType": { "type": "string", "enum": ["full", "partial", "item_specific"] },
+        "refundAmount": { "type": "number", "minimum": 0 },
+        "refundItems": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "productId": { "type": "string", "format": "uuid" },
+              "quantity": { "type": "number", "minimum": 0.01 },
+              "reason": { "type": "string", "maxLength": 500 }
+            }
+          }
+        },
+        "refundReason": { "type": "string", "enum": ["defective", "wrong_item", "customer_request", "policy_return", "damaged"] },
+        "notes": { "type": "string", "maxLength": 1000 },
+        "cashierId": { "type": "string", "format": "uuid" }
+      },
+      "required": ["transactionId", "refundType", "refundReason", "cashierId"]
+    },
+    "generateReceipt": {
+      "type": "object",
+      "properties": {
+        "transactionId": { "type": "string", "format": "uuid" },
+        "format": { "type": "string", "enum": ["pdf", "html", "thermal", "json"], "default": "pdf" },
+        "language": { "type": "string", "enum": ["en", "ha", "yo", "ig"], "default": "en" },
+        "includeTaxBreakdown": { "type": "boolean", "default": true },
+        "includeQRCode": { "type": "boolean", "default": true },
+        "includePromotions": { "type": "boolean", "default": true }
+      },
+      "required": ["transactionId"]
+    },
+    "validateTransaction": {
+      "type": "object",
+      "properties": {
+        "sessionId": { "type": "string", "format": "uuid" },
+        "performInventoryCheck": { "type": "boolean", "default": true },
+        "validateCustomer": { "type": "boolean", "default": true },
+        "checkPaymentLimits": { "type": "boolean", "default": true }
+      },
+      "required": ["sessionId"]
+    }
+  },
+  "outputs": {
+    "initializeCart": {
+      "type": "object",
+      "properties": {
+        "success": { "type": "boolean" },
+        "sessionId": { "type": "string", "format": "uuid" },
+        "cart": {
+          "type": "object",
+          "properties": {
+            "id": { "type": "string", "format": "uuid" },
+            "sessionId": { "type": "string", "format": "uuid" },
+            "cashierId": { "type": "string", "format": "uuid" },
+            "customerId": { "type": "string", "format": "uuid" },
+            "items": { "type": "array", "items": { "type": "object" } },
+            "subtotal": { "type": "number" },
+            "discounts": { "type": "array" },
+            "taxes": { "type": "array" },
+            "fees": { "type": "array" },
+            "total": { "type": "number" },
+            "status": { "type": "string" },
+            "createdAt": { "type": "string", "format": "date-time" },
+            "updatedAt": { "type": "string", "format": "date-time" }
+          }
+        },
+        "message": { "type": "string" },
+        "error": { "type": "string" }
+      }
+    },
+    "processPayment": {
+      "type": "object",
+      "properties": {
+        "success": { "type": "boolean" },
+        "transaction": {
+          "type": "object",
+          "properties": {
+            "id": { "type": "string", "format": "uuid" },
+            "transactionNumber": { "type": "string" },
+            "reference": { "type": "string" },
+            "total": { "type": "number" },
+            "currency": { "type": "string" },
+            "paymentStatus": { "type": "string" },
+            "paymentMethods": { "type": "array" },
+            "receiptUrl": { "type": "string" },
+            "qrCode": { "type": "string" },
+            "createdAt": { "type": "string", "format": "date-time" }
+          }
+        },
+        "receipt": {
+          "type": "object",
+          "properties": {
+            "id": { "type": "string" },
+            "format": { "type": "string" },
+            "url": { "type": "string" },
+            "content": { "type": "string" },
+            "qrCode": { "type": "string" }
+          }
+        },
+        "loyaltyPoints": {
+          "type": "object",
+          "properties": {
+            "earned": { "type": "number" },
+            "redeemed": { "type": "number" },
+            "balance": { "type": "number" }
+          }
+        },
+        "message": { "type": "string" },
+        "error": { "type": "string" }
+      }
+    },
+    "processRefund": {
+      "type": "object",
+      "properties": {
+        "success": { "type": "boolean" },
+        "refund": {
+          "type": "object",
+          "properties": {
+            "id": { "type": "string", "format": "uuid" },
+            "originalTransactionId": { "type": "string", "format": "uuid" },
+            "refundAmount": { "type": "number" },
+            "refundMethod": { "type": "string" },
+            "status": { "type": "string" },
+            "processingTime": { "type": "string" },
+            "refundReceipt": { "type": "string" },
+            "createdAt": { "type": "string", "format": "date-time" }
+          }
+        },
+        "inventoryUpdates": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "productId": { "type": "string", "format": "uuid" },
+              "quantityReturned": { "type": "number" },
+              "newStockLevel": { "type": "number" }
+            }
+          }
+        },
+        "message": { "type": "string" },
+        "error": { "type": "string" }
+      }
+    },
+    "validateTransaction": {
+      "type": "object",
+      "properties": {
+        "success": { "type": "boolean" },
+        "valid": { "type": "boolean" },
+        "validationResults": {
+          "type": "object",
+          "properties": {
+            "inventoryCheck": {
+              "type": "object",
+              "properties": {
+                "valid": { "type": "boolean" },
+                "insufficientStock": { "type": "array" },
+                "unavailableProducts": { "type": "array" }
+              }
+            },
+            "customerValidation": {
+              "type": "object",
+              "properties": {
+                "valid": { "type": "boolean" },
+                "creditLimit": { "type": "number" },
+                "loyaltyStatus": { "type": "string" }
+              }
+            },
+            "paymentLimits": {
+              "type": "object",
+              "properties": {
+                "valid": { "type": "boolean" },
+                "dailyLimit": { "type": "number" },
+                "transactionLimit": { "type": "number" }
+              }
+            }
+          }
+        },
+        "warnings": { "type": "array", "items": { "type": "string" } },
+        "message": { "type": "string" },
+        "error": { "type": "string" }
+      }
+    },
+    "calculateTax": {
+      "type": "object",
+      "properties": {
+        "success": { "type": "boolean" },
+        "taxCalculation": {
+          "type": "object",
+          "properties": {
+            "subtotal": { "type": "number" },
+            "taxableAmount": { "type": "number" },
+            "exemptAmount": { "type": "number" },
+            "vatAmount": { "type": "number" },
+            "vatRate": { "type": "number" },
+            "totalTax": { "type": "number" },
+            "grandTotal": { "type": "number" },
+            "breakdown": {
+              "type": "object",
+              "properties": {
+                "standardVAT": { "type": "number" },
+                "exemptVAT": { "type": "number" },
+                "luxuryTax": { "type": "number" },
+                "serviceTax": { "type": "number" }
+              }
+            }
+          }
+        },
+        "message": { "type": "string" },
+        "error": { "type": "string" }
+      }
+    }
+  },
+  "actions": [
+    "initializeCart",
+    "addToCart",
+    "updateCartItem",
+    "removeFromCart",
+    "clearCart",
+    "getCart",
+    "applyDiscount",
+    "removeDiscount",
+    "calculateTax",
+    "calculateTotal",
+    "validateTransaction",
+    "processPayment",
+    "processRefund",
+    "cancelTransaction",
+    "suspendTransaction",
+    "resumeTransaction",
+    "generateReceipt",
+    "printReceipt",
+    "emailReceipt",
+    "smsReceipt",
+    "holdTransaction",
+    "voidTransaction",
+    "splitPayment",
+    "layawayPayment",
+    "installmentPayment",
+    "loyaltyPointsRedemption",
+    "loyaltyPointsEarn",
+    "stockAdjustment",
+    "priceOverride",
+    "managerApproval",
+    "offlineSync",
+    "validateInventory",
+    "reserveStock",
+    "releaseStock"
+  ],
+  "dependencies": {
+    "internal": [
+      "auth/AuthenticationCore",
+      "auth/JWTTokenManager",
+      "payment/PaymentGatewayCore",
+      "payment/SplitPayment",
+      "inventory/ProductCatalog",
+      "inventory/InventoryTracking",
+      "customer/CustomerProfile",
+      "customer/CustomerEngagement"
+    ],
+    "external": [
+      "zod",
+      "uuid",
+      "crypto",
+      "qrcode",
+      "pdfkit",
+      "moment-timezone"
+    ]
+  },
+  "environment": {
+    "required": [
+      "DATABASE_URL",
+      "JWT_ACCESS_SECRET",
+      "ENCRYPTION_KEY"
+    ],
+    "optional": [
+      "RECEIPT_LOGO_URL",
+      "COMPANY_REGISTRATION_NUMBER",
+      "VAT_REGISTRATION_NUMBER",
+      "THERMAL_PRINTER_IP",
+      "SMS_GATEWAY_URL",
+      "EMAIL_TEMPLATE_PATH"
+    ]
+  },
+  "features": {
+    "cartManagement": {
+      "multipleItems": true,
+      "quantityUpdate": true,
+      "priceOverride": true,
+      "discountApplication": true,
+      "sessionPersistence": true,
+      "offlineSupport": true
+    },
+    "paymentProcessing": {
+      "multiplePaymentMethods": true,
+      "splitPayments": true,
+      "partialPayments": true,
+      "refunds": true,
+      "layaway": true,
+      "installments": true
+    },
+    "taxCalculation": {
+      "nigerianVAT": true,
+      "categoryExemptions": true,
+      "customerTypeDiscounts": true,
+      "realTimeCalculation": true,
+      "taxBreakdown": true
+    },
+    "receiptGeneration": {
+      "multipleFormats": true,
+      "qrCodes": true,
+      "multiLanguage": true,
+      "thermalPrinting": true,
+      "emailDelivery": true,
+      "smsDelivery": true
+    },
+    "offlineCapability": {
+      "localProcessing": true,
+      "autoSync": true,
+      "conflictResolution": true,
+      "dataIntegrity": true
+    },
+    "integration": {
+      "inventoryUpdates": true,
+      "customerLoyalty": true,
+      "paymentGateways": true,
+      "auditLogging": true
+    }
+  },
+  "api": {
+    "endpoints": [
+      {
+        "path": "/api/cells/sales/SalesEngine",
+        "method": "POST",
+        "description": "Main sales engine API endpoint for all transaction operations"
+      }
+    ]
+  },
+  "security": {
+    "authentication": "required",
+    "authorization": "role-based",
+    "auditLogging": "comprehensive",
+    "dataEncryption": "field-level",
+    "rateLimit": {
+      "requests": 200,
+      "window": "15m"
+    }
+  },
+  "compliance": {
+    "nigerian": {
+      "vatCompliance": true,
+      "receiptStandards": true,
+      "auditTrails": true,
+      "dataRetention": "7_years"
+    },
+    "international": {
+      "pciDss": "applicable",
+      "gdpr": "data-minimal",
+      "sox": "audit-trail"
+    }
+  },
+  "monitoring": {
+    "events": [
+      "cart.initialized",
+      "item.added",
+      "item.removed",
+      "discount.applied",
+      "tax.calculated",
+      "payment.processed",
+      "payment.failed",
+      "refund.processed",
+      "receipt.generated",
+      "inventory.updated",
+      "offline.synced"
+    ],
+    "metrics": [
+      "transaction_volume",
+      "transaction_value",
+      "payment_success_rate",
+      "average_transaction_time",
+      "refund_rate",
+      "offline_usage_percentage",
+      "cart_abandonment_rate"
+    ]
+  },
+  "created": "2025-09-15T00:00:00Z",
+  "updated": "2025-09-15T00:00:00Z"
+}
