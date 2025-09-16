@@ -1,0 +1,69 @@
+{
+  "id": "ui/FormField",
+  "name": "FormField",
+  "sector": "ui",
+  "version": "1.0.0",
+  "description": "Reusable form field component with validation, error states, and mobile-optimized inputs",
+  "channels": ["stable", "canary"],
+  "inputs": {
+    "renderField": {
+      "type": "object",
+      "properties": {
+        "type": { 
+          "type": "string",
+          "enum": ["text", "email", "password", "number", "tel", "url", "textarea", "select", "checkbox", "radio", "file"]
+        },
+        "label": { "type": "string" },
+        "placeholder": { "type": "string" },
+        "value": { "type": "string" },
+        "required": { "type": "boolean" },
+        "disabled": { "type": "boolean" },
+        "readonly": { "type": "boolean" },
+        "error": { "type": "string" },
+        "helperText": { "type": "string" },
+        "icon": { "type": "string" },
+        "iconPosition": { "type": "string", "enum": ["left", "right"] },
+        "options": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "value": { "type": "string" },
+              "label": { "type": "string" },
+              "disabled": { "type": "boolean" }
+            }
+          }
+        },
+        "validation": {
+          "type": "object",
+          "properties": {
+            "min": { "type": "number" },
+            "max": { "type": "number" },
+            "minLength": { "type": "number" },
+            "maxLength": { "type": "number" },
+            "pattern": { "type": "string" },
+            "custom": { "type": "string" }
+          }
+        },
+        "autoComplete": { "type": "string" },
+        "size": { "type": "string", "enum": ["sm", "default", "lg"] },
+        "fullWidth": { "type": "boolean" }
+      },
+      "required": ["type"]
+    }
+  },
+  "outputs": {
+    "renderField": {
+      "type": "object",
+      "properties": {
+        "component": { "type": "string" },
+        "isValid": { "type": "boolean" },
+        "value": { "type": "string" }
+      }
+    }
+  },
+  "actions": ["renderField", "validate", "handleChange", "handleFocus", "handleBlur"],
+  "dependencies": ["@/components/ui/input", "@/components/ui/label", "@/components/ui/textarea", "@/components/ui/select"],
+  "created": "2025-01-16T00:00:00Z",
+  "updated": "2025-01-16T00:00:00Z"
+}
