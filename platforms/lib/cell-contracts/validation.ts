@@ -19,7 +19,28 @@ import {
   CustomerBasicSchema,
   B2BAccessResultSchema,
   EngagementInteractionSchema
-} from './types';
+} from './types.js';
+
+import {
+  AuthenticationRequestSchema,
+  AuthenticationResponseSchema as AuthResponseSchema,
+  JWTValidationRequestSchema,
+  JWTValidationResponseSchema as JWTResponseSchema,
+  SocialLoginRequestSchema,
+  SocialLoginResponseSchema as SocialResponseSchema,
+  PaymentGatewayRequestSchema,
+  PaymentGatewayResponseSchema as PaymentResponseSchema,
+  SplitPaymentRequestSchema,
+  SplitPaymentResponseSchema as SplitResponseSchema,
+  MultiLocationRequestSchema,
+  MultiLocationResponseSchema as LocationResponseSchema,
+  RepairJobRequestSchema,
+  RepairJobResponseSchema as RepairResponseSchema,
+  RestaurantOrderRequestSchema,
+  RestaurantOrderResponseSchema as RestaurantResponseSchema,
+  TransactionHistoryRequestSchema,
+  TransactionHistoryResponseSchema as TransactionResponseSchema
+} from './complete-schemas.js';
 
 // =============================================================================
 // CONTRACT VALIDATION REGISTRY
@@ -116,6 +137,11 @@ globalRegistry.register({
       requestSchema: B2BAccessCheckRequestSchema,
       responseSchema: B2BAccessCheckResponseSchema,
       description: 'Check B2B user access permissions for resources and actions'
+    },
+    'health': {
+      requestSchema: z.object({}),
+      responseSchema: CellHealthResponseSchema,
+      description: 'Health check for B2B access control cell'
     }
   }
 });
@@ -130,6 +156,11 @@ globalRegistry.register({
       requestSchema: TrackEngagementRequestSchema,
       responseSchema: TrackEngagementResponseSchema,
       description: 'Track customer engagement interactions and calculate scores'
+    },
+    'health': {
+      requestSchema: z.object({}),
+      responseSchema: CellHealthResponseSchema,
+      description: 'Health check for customer engagement cell'
     }
   }
 });
@@ -184,6 +215,11 @@ globalRegistry.register({
         })
       })),
       description: 'Calculate taxes and fees for transactions with Nigerian compliance'
+    },
+    'health': {
+      requestSchema: z.object({}),
+      responseSchema: CellHealthResponseSchema,
+      description: 'Health check for tax and fee calculation cell'
     }
   }
 });
@@ -213,6 +249,11 @@ globalRegistry.register({
         status: z.enum(['available', 'low_stock', 'out_of_stock', 'discontinued'])
       })),
       description: 'Check stock availability and reservation status for products'
+    },
+    'health': {
+      requestSchema: z.object({}),
+      responseSchema: CellHealthResponseSchema,
+      description: 'Health check for inventory tracking cell'
     }
   }
 });
@@ -249,6 +290,11 @@ globalRegistry.register({
         updatedAt: z.string().datetime()
       })),
       description: 'Retrieve product information from catalog with optional pricing and inventory'
+    },
+    'health': {
+      requestSchema: z.object({}),
+      responseSchema: CellHealthResponseSchema,
+      description: 'Health check for product catalog cell'
     }
   }
 });
@@ -295,6 +341,182 @@ globalRegistry.register({
         }))
       })),
       description: 'Process sales transaction with payment, inventory, and receipt generation'
+    },
+    'health': {
+      requestSchema: z.object({}),
+      responseSchema: CellHealthResponseSchema,
+      description: 'Health check for sales engine cell'
+    }
+  }
+});
+
+// Authentication Core Cell Contract
+globalRegistry.register({
+  cellDomain: 'auth',
+  cellName: 'core',
+  version: 'v1',
+  operations: {
+    'authenticate': {
+      requestSchema: AuthenticationRequestSchema,
+      responseSchema: AuthResponseSchema,
+      description: 'Authenticate user with email/username and password'
+    },
+    'health': {
+      requestSchema: z.object({}),
+      responseSchema: CellHealthResponseSchema,
+      description: 'Health check for authentication core cell'
+    }
+  }
+});
+
+// JWT Token Manager Cell Contract
+globalRegistry.register({
+  cellDomain: 'auth',
+  cellName: 'jwt-manager',
+  version: 'v1',
+  operations: {
+    'validate-token': {
+      requestSchema: JWTValidationRequestSchema,
+      responseSchema: JWTResponseSchema,
+      description: 'Validate, refresh, or revoke JWT tokens'
+    },
+    'health': {
+      requestSchema: z.object({}),
+      responseSchema: CellHealthResponseSchema,
+      description: 'Health check for JWT token manager cell'
+    }
+  }
+});
+
+// Social Login Integration Cell Contract
+globalRegistry.register({
+  cellDomain: 'auth',
+  cellName: 'social-login',
+  version: 'v1',
+  operations: {
+    'login': {
+      requestSchema: SocialLoginRequestSchema,
+      responseSchema: SocialResponseSchema,
+      description: 'Handle social media authentication (Google, GitHub, LinkedIn)'
+    },
+    'health': {
+      requestSchema: z.object({}),
+      responseSchema: CellHealthResponseSchema,
+      description: 'Health check for social login cell'
+    }
+  }
+});
+
+// Payment Gateway Core Cell Contract
+globalRegistry.register({
+  cellDomain: 'payment',
+  cellName: 'gateway-core',
+  version: 'v1',
+  operations: {
+    'process-payment': {
+      requestSchema: PaymentGatewayRequestSchema,
+      responseSchema: PaymentResponseSchema,
+      description: 'Process payments through Nigerian payment providers (Paystack, Flutterwave, Interswitch)'
+    },
+    'health': {
+      requestSchema: z.object({}),
+      responseSchema: CellHealthResponseSchema,
+      description: 'Health check for payment gateway core cell'
+    }
+  }
+});
+
+// Split Payment Cell Contract
+globalRegistry.register({
+  cellDomain: 'payment',
+  cellName: 'split-payment',
+  version: 'v1',
+  operations: {
+    'process-split': {
+      requestSchema: SplitPaymentRequestSchema,
+      responseSchema: SplitResponseSchema,
+      description: 'Process split payments with multiple recipients'
+    },
+    'health': {
+      requestSchema: z.object({}),
+      responseSchema: CellHealthResponseSchema,
+      description: 'Health check for split payment cell'
+    }
+  }
+});
+
+// Multi-Location Management Cell Contract
+globalRegistry.register({
+  cellDomain: 'location',
+  cellName: 'multi-management',
+  version: 'v1',
+  operations: {
+    'manage-locations': {
+      requestSchema: MultiLocationRequestSchema,
+      responseSchema: LocationResponseSchema,
+      description: 'Manage multiple business locations with inventory transfers and sales reporting'
+    },
+    'health': {
+      requestSchema: z.object({}),
+      responseSchema: CellHealthResponseSchema,
+      description: 'Health check for multi-location management cell'
+    }
+  }
+});
+
+// Repair Shop Management Cell Contract
+globalRegistry.register({
+  cellDomain: 'specialized',
+  cellName: 'repair-shop',
+  version: 'v1',
+  operations: {
+    'manage-repair': {
+      requestSchema: RepairJobRequestSchema,
+      responseSchema: RepairResponseSchema,
+      description: 'Complete repair shop workflow from job intake to completion'
+    },
+    'health': {
+      requestSchema: z.object({}),
+      responseSchema: CellHealthResponseSchema,
+      description: 'Health check for repair shop management cell'
+    }
+  }
+});
+
+// Restaurant Table KDS Cell Contract
+globalRegistry.register({
+  cellDomain: 'specialized',
+  cellName: 'restaurant-kds',
+  version: 'v1',
+  operations: {
+    'manage-order': {
+      requestSchema: RestaurantOrderRequestSchema,
+      responseSchema: RestaurantResponseSchema,
+      description: 'Restaurant order and kitchen display system management'
+    },
+    'health': {
+      requestSchema: z.object({}),
+      responseSchema: CellHealthResponseSchema,
+      description: 'Health check for restaurant table/KDS cell'
+    }
+  }
+});
+
+// Transaction History Cell Contract
+globalRegistry.register({
+  cellDomain: 'sales',
+  cellName: 'transaction-history',
+  version: 'v1',
+  operations: {
+    'get-transactions': {
+      requestSchema: TransactionHistoryRequestSchema,
+      responseSchema: TransactionResponseSchema,
+      description: 'Retrieve transaction history with filtering and reporting'
+    },
+    'health': {
+      requestSchema: z.object({}),
+      responseSchema: CellHealthResponseSchema,
+      description: 'Health check for sales transaction processing cell'
     }
   }
 });
@@ -302,6 +524,8 @@ globalRegistry.register({
 export function getGlobalContractRegistry(): ContractRegistry {
   return globalRegistry;
 }
+
+// Types are already exported via class/interface declarations above
 
 // =============================================================================
 // GOLDEN TESTS SUPPORT
