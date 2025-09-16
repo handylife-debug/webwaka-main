@@ -2152,6 +2152,120 @@ export const ALL_HR_TABLES_SQL = [
   COMMUNICATION_LOGS_TABLE_SQL
 ].join('\n\n');
 
+// ===================================================================
+// POS TRANSACTIONS SCHEMA - Point of Sale transaction management
+// ===================================================================
+export const POS_TRANSACTIONS_TABLE_SQL = `
+  CREATE TABLE IF NOT EXISTS pos_transactions (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    tenant_id UUID NOT NULL,
+    transaction_number VARCHAR(100) NOT NULL,
+    reference VARCHAR(100),
+    
+    -- Transaction Items (JSON array)
+    items JSONB NOT NULL DEFAULT '[]'::jsonb,
+    
+    -- Financial calculations
+    subtotal DECIMAL(15,2) NOT NULL DEFAULT 0,
+    discounts JSONB DEFAULT '[]'::jsonb,
+    taxes JSONB DEFAULT '[]'::jsonb,
+    fees JSONB DEFAULT '[]'::jsonb,
+    total DECIMAL(15,2) NOT NULL DEFAULT 0,
+    
+    -- Payment information
+    payment_method VARCHAR(50) NOT NULL,
+    payment_status VARCHAR(20) DEFAULT 'pending' CHECK (payment_status IN ('pending', 'completed', 'failed', 'cancelled', 'refunded', 'partially_refunded')),
+    payment_reference VARCHAR(255),
+    
+    -- Customer information
+    customer_info JSONB DEFAULT '{}'::jsonb,
+    
+    -- Transaction metadata
+    cashier VARCHAR(200) NOT NULL,
+    location_id UUID,
+    terminal_id VARCHAR(100),
+    notes TEXT,
+    
+    -- Refund tracking
+    refunds JSONB DEFAULT '[]'::jsonb,
+    refundable BOOLEAN DEFAULT true,
+    refund_deadline TIMESTAMP WITH TIME ZONE,
+    
+    -- Sync tracking for offline functionality
+    synced_at TIMESTAMP WITH TIME ZONE,
+    offline_id VARCHAR(100),
+    
+    -- Audit fields
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    created_by UUID,
+    
+    -- Multi-tenant constraints
+    CONSTRAINT fk_pos_transactions_tenant FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
+    CONSTRAINT fk_pos_transactions_location FOREIGN KEY (location_id) REFERENCES locations(id) ON DELETE SET NULL,
+    
+    -- Unique constraints scoped by tenant
+    CONSTRAINT unique_transaction_number_per_tenant UNIQUE (tenant_id, transaction_number),
+    CONSTRAINT unique_offline_id_per_tenant UNIQUE (tenant_id, offline_id),
+    
+    -- Data integrity constraints
+    CONSTRAINT check_amounts_non_negative CHECK (
+      subtotal >= 0 AND total >= 0
+    ),
+    CONSTRAINT check_payment_reference_when_completed CHECK (
+      payment_status IN ('pending', 'failed', 'cancelled') OR payment_reference IS NOT NULL
+    )
+  );
+`;
+
+// POS Transaction Items table for normalized storage (optional - items can also be stored in JSONB)
+export const POS_TRANSACTION_ITEMS_TABLE_SQL = `
+  CREATE TABLE IF NOT EXISTS pos_transaction_items (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    tenant_id UUID NOT NULL,
+    transaction_id UUID NOT NULL,
+    
+    -- Product information
+    product_id UUID,
+    variant_id UUID,
+    name VARCHAR(200) NOT NULL,
+    sku VARCHAR(100),
+    barcode VARCHAR(100),
+    
+    -- Pricing and quantities
+    unit_price DECIMAL(15,2) NOT NULL,
+    quantity DECIMAL(10,3) NOT NULL DEFAULT 1,
+    subtotal DECIMAL(15,2) NOT NULL,
+    
+    -- Discounts and taxes for this item
+    item_discounts JSONB DEFAULT '[]'::jsonb,
+    item_taxes JSONB DEFAULT '[]'::jsonb,
+    final_price DECIMAL(15,2) NOT NULL,
+    
+    -- Item metadata
+    notes TEXT,
+    metadata JSONB DEFAULT '{}'::jsonb,
+    
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    
+    -- Multi-tenant constraints
+    CONSTRAINT fk_pos_transaction_items_tenant FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
+    CONSTRAINT fk_pos_transaction_items_transaction FOREIGN KEY (transaction_id) REFERENCES pos_transactions(id) ON DELETE CASCADE,
+    CONSTRAINT fk_pos_transaction_items_product FOREIGN KEY (product_id) REFERENCES inventory_products(id) ON DELETE SET NULL,
+    CONSTRAINT fk_pos_transaction_items_variant FOREIGN KEY (variant_id) REFERENCES product_variants(id) ON DELETE SET NULL,
+    
+    -- Data integrity constraints
+    CONSTRAINT check_item_amounts_non_negative CHECK (
+      unit_price >= 0 AND quantity > 0 AND subtotal >= 0 AND final_price >= 0
+    )
+  );
+`;
+
+export const ALL_POS_TABLES_SQL = [
+  POS_TRANSACTIONS_TABLE_SQL,
+  POS_TRANSACTION_ITEMS_TABLE_SQL
+].join('\n\n');
+
 // Complete system schema aggregation
 export const ALL_SYSTEM_TABLES_SQL = [
   TENANTS_TABLE_SQL,
@@ -2159,7 +2273,8 @@ export const ALL_SYSTEM_TABLES_SQL = [
   ALL_INVENTORY_TABLES_SQL,
   ALL_CRM_TABLES_SQL,
   ALL_USER_TABLES_SQL,
-  ALL_HR_TABLES_SQL
+  ALL_HR_TABLES_SQL,
+  ALL_POS_TABLES_SQL
 ].join('\n\n');
 
 export const ALL_SYSTEM_INDEXES_SQL = ALL_INDEXES_SQL;
