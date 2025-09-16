@@ -1,0 +1,261 @@
+{
+  "id": "customer/CustomerProfile",
+  "name": "CustomerProfile",
+  "sector": "customer",
+  "version": "1.0.0",
+  "description": "Comprehensive customer profile management with Nigerian market features including multi-language support, SMS communication, and mobile-first design",
+  "channels": ["stable", "canary"],
+  "inputs": {
+    "createCustomer": {
+      "type": "object",
+      "properties": {
+        "tenantId": { "type": "string" },
+        "customerData": {
+          "type": "object",
+          "properties": {
+            "personalInfo": {
+              "type": "object",
+              "properties": {
+                "firstName": { "type": "string" },
+                "lastName": { "type": "string" },
+                "middleName": { "type": "string" },
+                "dateOfBirth": { "type": "string" },
+                "gender": { "type": "string" },
+                "preferredLanguage": { "type": "string" }
+              }
+            },
+            "contactInfo": {
+              "type": "object",
+              "properties": {
+                "primaryPhone": { "type": "string" },
+                "secondaryPhone": { "type": "string" },
+                "email": { "type": "string" },
+                "whatsappNumber": { "type": "string" },
+                "preferredContactMethod": { "type": "string" }
+              }
+            },
+            "address": {
+              "type": "object",
+              "properties": {
+                "street": { "type": "string" },
+                "city": { "type": "string" },
+                "state": { "type": "string" },
+                "country": { "type": "string" },
+                "postalCode": { "type": "string" },
+                "lga": { "type": "string" }
+              }
+            },
+            "businessInfo": {
+              "type": "object",
+              "properties": {
+                "customerType": { "type": "string" },
+                "industry": { "type": "string" },
+                "companyName": { "type": "string" },
+                "taxId": { "type": "string" }
+              }
+            },
+            "preferences": {
+              "type": "object",
+              "properties": {
+                "communicationPreferences": { "type": "array" },
+                "marketingOptIn": { "type": "boolean" },
+                "smsOptIn": { "type": "boolean" },
+                "emailOptIn": { "type": "boolean" },
+                "whatsappOptIn": { "type": "boolean" }
+              }
+            }
+          }
+        }
+      },
+      "required": ["tenantId", "customerData"]
+    },
+    "updateCustomer": {
+      "type": "object",
+      "properties": {
+        "tenantId": { "type": "string" },
+        "customerId": { "type": "string" },
+        "updates": { "type": "object" }
+      },
+      "required": ["tenantId", "customerId", "updates"]
+    },
+    "getCustomer": {
+      "type": "object",
+      "properties": {
+        "tenantId": { "type": "string" },
+        "customerId": { "type": "string" },
+        "includeContacts": { "type": "boolean" },
+        "includeAddresses": { "type": "boolean" },
+        "includeNotes": { "type": "boolean" },
+        "includeDocuments": { "type": "boolean" }
+      },
+      "required": ["tenantId", "customerId"]
+    },
+    "searchCustomers": {
+      "type": "object",
+      "properties": {
+        "tenantId": { "type": "string" },
+        "query": { "type": "string" },
+        "filters": {
+          "type": "object",
+          "properties": {
+            "customerType": { "type": "string" },
+            "status": { "type": "string" },
+            "state": { "type": "string" },
+            "lga": { "type": "string" },
+            "preferredLanguage": { "type": "string" },
+            "tags": { "type": "array" }
+          }
+        },
+        "pagination": {
+          "type": "object",
+          "properties": {
+            "page": { "type": "number" },
+            "limit": { "type": "number" }
+          }
+        }
+      },
+      "required": ["tenantId"]
+    },
+    "manageContacts": {
+      "type": "object",
+      "properties": {
+        "tenantId": { "type": "string" },
+        "customerId": { "type": "string" },
+        "contactData": { "type": "object" },
+        "action": { "type": "string" }
+      },
+      "required": ["tenantId", "customerId", "action"]
+    },
+    "manageAddresses": {
+      "type": "object",
+      "properties": {
+        "tenantId": { "type": "string" },
+        "customerId": { "type": "string" },
+        "addressData": { "type": "object" },
+        "action": { "type": "string" }
+      },
+      "required": ["tenantId", "customerId", "action"]
+    },
+    "sendCommunication": {
+      "type": "object",
+      "properties": {
+        "tenantId": { "type": "string" },
+        "customerId": { "type": "string" },
+        "communicationType": { "type": "string" },
+        "message": { "type": "string" },
+        "language": { "type": "string" },
+        "templateId": { "type": "string" }
+      },
+      "required": ["tenantId", "customerId", "communicationType", "message"]
+    }
+  },
+  "outputs": {
+    "createCustomer": {
+      "type": "object",
+      "properties": {
+        "success": { "type": "boolean" },
+        "customerId": { "type": "string" },
+        "customerCode": { "type": "string" },
+        "message": { "type": "string" }
+      }
+    },
+    "updateCustomer": {
+      "type": "object",
+      "properties": {
+        "success": { "type": "boolean" },
+        "message": { "type": "string" },
+        "updatedFields": { "type": "array" }
+      }
+    },
+    "getCustomer": {
+      "type": "object",
+      "properties": {
+        "success": { "type": "boolean" },
+        "customer": {
+          "type": "object",
+          "properties": {
+            "id": { "type": "string" },
+            "customerCode": { "type": "string" },
+            "personalInfo": { "type": "object" },
+            "contactInfo": { "type": "object" },
+            "addresses": { "type": "array" },
+            "contacts": { "type": "array" },
+            "notes": { "type": "array" },
+            "documents": { "type": "array" },
+            "metadata": { "type": "object" },
+            "stats": {
+              "type": "object",
+              "properties": {
+                "totalPurchases": { "type": "number" },
+                "lifetimeValue": { "type": "number" },
+                "lastPurchase": { "type": "string" },
+                "loyaltyPoints": { "type": "number" },
+                "tier": { "type": "string" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "searchCustomers": {
+      "type": "object",
+      "properties": {
+        "success": { "type": "boolean" },
+        "customers": { "type": "array" },
+        "pagination": {
+          "type": "object",
+          "properties": {
+            "total": { "type": "number" },
+            "page": { "type": "number" },
+            "limit": { "type": "number" },
+            "hasMore": { "type": "boolean" }
+          }
+        },
+        "filters": { "type": "object" }
+      }
+    },
+    "sendCommunication": {
+      "type": "object",
+      "properties": {
+        "success": { "type": "boolean" },
+        "messageId": { "type": "string" },
+        "deliveryStatus": { "type": "string" },
+        "cost": { "type": "number" }
+      }
+    }
+  },
+  "actions": [
+    "createCustomer: Create new customer profile with Nigerian market validations",
+    "updateCustomer: Update existing customer information with audit trail",
+    "getCustomer: Retrieve comprehensive customer profile with related data",
+    "searchCustomers: Advanced customer search with Nigerian geographic filters",
+    "manageContacts: Add, update, or remove customer contact persons",
+    "manageAddresses: Manage customer billing and shipping addresses",
+    "sendCommunication: Send SMS, WhatsApp, or email to customers in their preferred language",
+    "validatePhoneNumber: Validate Nigerian phone numbers and format correctly",
+    "getCustomerStats: Calculate customer lifetime value and purchase statistics",
+    "exportCustomerData: Export customer data for analysis or backup"
+  ],
+  "dependencies": {
+    "database": ["customers", "customer_contacts", "customer_addresses", "customer_interactions", "customer_notes", "customer_documents"],
+    "services": ["sms-service", "email-service", "whatsapp-service", "pos-transactions"],
+    "integrations": ["twilio", "replitmail"],
+    "ui": ["shadcn/ui", "lucide-react", "react-hook-form"]
+  },
+  "features": {
+    "nigerianMarketSupport": true,
+    "multiLanguageSupport": true,
+    "smsIntegration": true,
+    "whatsappIntegration": true,
+    "phoneValidation": true,
+    "addressValidation": true,
+    "documentManagement": true,
+    "contactManagement": true,
+    "communicationHistory": true,
+    "auditTrail": true,
+    "dataExport": true,
+    "customerStats": true
+  },
+  "created": "2025-09-15T00:00:00Z",
+  "updated": "2025-09-15T00:00:00Z"
+}
