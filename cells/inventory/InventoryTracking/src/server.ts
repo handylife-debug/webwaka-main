@@ -20,6 +20,8 @@ export interface StockLevel {
   lastMovementId?: string;
   batchNumbers?: string[];
   expiryDates?: string[];
+  serialNumbers?: string[]; // POS-102 Enhancement: Advanced serial tracking
+  lotNumbers?: string[]; // POS-102 Enhancement: Advanced lot tracking
 }
 
 export interface StockMovement {
@@ -39,6 +41,8 @@ export interface StockMovement {
   totalValue: number;
   batchNumber?: string;
   expiryDate?: string;
+  serialNumbers?: string[]; // POS-102 Enhancement: Serial tracking per movement
+  lotNumber?: string; // POS-102 Enhancement: Lot tracking per movement
   notes?: string;
   performedBy: string;
   createdAt: string;
@@ -180,6 +184,74 @@ export interface ReorderSuggestion {
   supplierInfo?: string;
   lastOrderDate?: string;
   generatedAt: string;
+}
+
+// POS-102 Enhancement: Advanced Serial Number Tracking Interface
+export interface SerialNumberRecord {
+  id: string;
+  tenantId: string;
+  productId: string;
+  variantId?: string;
+  locationId: string;
+  serialNumber: string;
+  status: 'available' | 'sold' | 'reserved' | 'damaged' | 'returned' | 'warranty';
+  batchNumber?: string;
+  lotNumber?: string;
+  manufacturingDate?: string;
+  expiryDate?: string;
+  warrantyPeriod?: number; // days
+  supplierInfo?: {
+    supplierId: string;
+    supplierLotNumber?: string;
+    receiptDate: string;
+  };
+  saleInfo?: {
+    saleId: string;
+    soldDate: string;
+    customerId?: string;
+  };
+  notes?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+// POS-102 Enhancement: Advanced Lot Tracking Interface
+export interface LotRecord {
+  id: string;
+  tenantId: string;
+  productId: string;
+  variantId?: string;
+  lotNumber: string;
+  batchNumber?: string;
+  manufacturingDate?: string;
+  expiryDate?: string;
+  initialQuantity: number;
+  currentQuantity: number;
+  reservedQuantity: number;
+  soldQuantity: number;
+  lossQuantity: number;
+  unitCost: number;
+  totalValue: number;
+  supplierInfo?: {
+    supplierId: string;
+    supplierLotNumber?: string;
+    receiptDate: string;
+    certificateNumber?: string;
+  };
+  qualityInfo?: {
+    inspectionDate?: string;
+    inspectedBy?: string;
+    qualityStatus: 'approved' | 'rejected' | 'pending' | 'quarantine';
+    testResults?: Record<string, any>;
+  };
+  locations: Array<{
+    locationId: string;
+    quantity: number;
+    lastMovement: string;
+  }>;
+  notes?: string;
+  createdAt: string;
+  updatedAt: string;
 }
 
 export interface InventoryValuation {
@@ -1910,5 +1982,326 @@ export const inventoryTrackingCell = {
     const toRate = 'conversionRate' in toUnitInfo ? toUnitInfo.conversionRate : 1;
 
     return (quantity * fromRate) / toRate;
+  },
+
+  // ========================================
+  // ADVANCED SERIAL/LOT TRACKING OPERATIONS (POS-102 Enhancement)  
+  // ========================================
+
+  /**
+   * Manage serial number tracking using existing stock movement infrastructure
+   */
+  async manageSerialNumbers(input: unknown, tenantId: string): Promise<{ success: boolean; serialRecords?: SerialNumberRecord[]; message: string; error?: string }> {
+    return await safeRedisOperation(
+      async () => {
+        const {
+          productId,
+          variantId,
+          locationId,
+          serialNumbers,
+          action = 'create',
+          batchNumber,
+          lotNumber,
+          supplierInfo
+        } = input as {
+          productId: string;
+          variantId?: string;
+          locationId: string;
+          serialNumbers: string[];
+          action: 'create' | 'update' | 'transfer' | 'sell' | 'return' | 'damage';
+          batchNumber?: string;
+          lotNumber?: string;
+          supplierInfo?: any;
+        };
+
+        const serialRecords: SerialNumberRecord[] = [];
+        const now = new Date().toISOString();
+
+        for (const serialNumber of serialNumbers) {
+          let status: SerialNumberRecord['status'] = action === 'sell' ? 'sold' : 
+                     action === 'damage' ? 'damaged' : 
+                     action === 'return' ? 'returned' : 'available';
+
+          // Leverage existing stock movement table with serial tracking
+          const movementId = crypto.randomUUID();
+          
+          // Create stock movement with serial number tracking embedded in batch_number field
+          await execute_sql(
+            `INSERT INTO inventory_stock_movements (
+              id, tenant_id, product_id, variant_id, location_id, movement_type,
+              movement_reason, quantity_before, quantity_changed, quantity_after,
+              cost_per_unit, total_value, batch_number, notes, performed_by, created_at
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)`,
+            [
+              movementId, tenantId, productId, variantId, locationId, 
+              action === 'create' || action === 'update' ? 'in' : 'out',
+              action, 0, 1, 1, 0, 0, 
+              `SERIAL:${serialNumber}|BATCH:${batchNumber || ''}|LOT:${lotNumber || ''}`,
+              `Serial tracking: ${action} ${serialNumber}`, tenantId, now
+            ]
+          );
+
+          // Create serial record representation
+          const serialRecord: SerialNumberRecord = {
+            id: movementId,
+            tenantId,
+            productId,
+            variantId,
+            locationId,
+            serialNumber,
+            status,
+            batchNumber,
+            lotNumber,
+            supplierInfo,
+            notes: `Serial ${action} operation`,
+            createdAt: now,
+            updatedAt: now
+          };
+
+          serialRecords.push(serialRecord);
+        }
+
+        console.log(`[InventoryTracking] Managed ${serialRecords.length} serial numbers for product ${productId}`);
+
+        return {
+          success: true,
+          serialRecords,
+          message: `Successfully managed ${serialRecords.length} serial numbers`
+        };
+      },
+      {
+        success: false as const,
+        message: 'Serial number management service temporarily unavailable',
+        error: 'Service error'
+      }
+    );
+  },
+
+  /**
+   * Get serial number tracking report from existing stock movements
+   */
+  async getSerialNumberReport(input: unknown, tenantId: string): Promise<{ success: boolean; report?: any; message: string; error?: string }> {
+    return await safeRedisOperation(
+      async () => {
+        const {
+          productId,
+          locationId,
+          serialNumber,
+          limit = 100,
+          offset = 0
+        } = input as {
+          productId?: string;
+          locationId?: string;
+          serialNumber?: string;
+          limit?: number;
+          offset?: number;
+        };
+
+        // Build query to find serial number movements in batch_number field
+        const whereConditions = ['sm.tenant_id = $1', 'sm.batch_number LIKE \'SERIAL:%\''];
+        const queryParams = [tenantId];
+        let paramCounter = 2;
+
+        if (productId) {
+          whereConditions.push(`sm.product_id = $${paramCounter}`);
+          queryParams.push(productId);
+          paramCounter++;
+        }
+
+        if (locationId) {
+          whereConditions.push(`sm.location_id = $${paramCounter}`);
+          queryParams.push(locationId);
+          paramCounter++;
+        }
+
+        if (serialNumber) {
+          whereConditions.push(`sm.batch_number LIKE $${paramCounter}`);
+          queryParams.push(`%SERIAL:${serialNumber}%`);
+          paramCounter++;
+        }
+
+        const query = `
+          SELECT 
+            sm.*,
+            p.product_name,
+            p.product_code,
+            pv.variant_name,
+            l.location_name
+          FROM inventory_stock_movements sm
+          JOIN inventory_products p ON sm.product_id = p.id
+          LEFT JOIN product_variants pv ON sm.variant_id = pv.id
+          LEFT JOIN locations l ON sm.location_id = l.id
+          WHERE ${whereConditions.join(' AND ')}
+          ORDER BY sm.created_at DESC
+          LIMIT $${paramCounter} OFFSET $${paramCounter + 1}
+        `;
+
+        queryParams.push(limit, offset);
+
+        const result = await execute_sql(query, queryParams);
+        
+        const serialMovements = result.rows.map((row: any) => {
+          // Parse serial info from batch_number field format: SERIAL:xxx|BATCH:yyy|LOT:zzz
+          const batchInfo = row.batch_number || '';
+          const serialMatch = batchInfo.match(/SERIAL:([^|]*)/);
+          const batchMatch = batchInfo.match(/BATCH:([^|]*)/);
+          const lotMatch = batchInfo.match(/LOT:([^|]*)/);
+
+          return {
+            id: row.id,
+            productId: row.product_id,
+            productName: row.product_name,
+            serialNumber: serialMatch ? serialMatch[1] : 'Unknown',
+            batchNumber: batchMatch ? batchMatch[1] || null : null,
+            lotNumber: lotMatch ? lotMatch[1] || null : null,
+            movementType: row.movement_type,
+            movementReason: row.movement_reason,
+            locationId: row.location_id,
+            locationName: row.location_name,
+            createdAt: row.created_at,
+            notes: row.notes
+          };
+        });
+
+        const report = {
+          serialMovements,
+          pagination: {
+            total: serialMovements.length,
+            limit,
+            offset,
+            hasMore: serialMovements.length === limit
+          },
+          summary: {
+            totalMovements: serialMovements.length
+          }
+        };
+
+        return {
+          success: true,
+          report,
+          message: `Found ${serialMovements.length} serial tracking records`
+        };
+      },
+      {
+        success: false as const,
+        message: 'Serial number report service temporarily unavailable',
+        error: 'Service error'
+      }
+    );
+  },
+
+  /**
+   * Get lot expiry and aging report using existing batch tracking
+   */
+  async getLotExpiryReport(input: unknown, tenantId: string): Promise<{ success: boolean; report?: any; message: string; error?: string }> {
+    return await safeRedisOperation(
+      async () => {
+        const {
+          locationId,
+          productId,
+          daysToExpiry = 30
+        } = input as {
+          locationId?: string;
+          productId?: string;
+          daysToExpiry?: number;
+        };
+
+        const whereConditions = ['sl.tenant_id = $1', 'sl.total_quantity > 0'];
+        const queryParams = [tenantId];
+        let paramCounter = 2;
+
+        if (locationId) {
+          whereConditions.push(`sl.location_id = $${paramCounter}`);
+          queryParams.push(locationId);
+          paramCounter++;
+        }
+
+        if (productId) {
+          whereConditions.push(`sl.product_id = $${paramCounter}`);
+          queryParams.push(productId);
+          paramCounter++;
+        }
+
+        // Leverage existing stock levels with batch/expiry tracking
+        const query = `
+          SELECT 
+            sl.*,
+            p.product_name,
+            p.product_code,
+            l.location_name,
+            CASE 
+              WHEN sl.expiry_dates IS NOT NULL AND array_length(sl.expiry_dates, 1) > 0 THEN
+                sl.expiry_dates[1]::date
+              ELSE NULL
+            END as earliest_expiry,
+            CASE 
+              WHEN sl.expiry_dates IS NOT NULL AND array_length(sl.expiry_dates, 1) > 0 THEN
+                CASE 
+                  WHEN sl.expiry_dates[1]::date < CURRENT_DATE THEN 'expired'
+                  WHEN sl.expiry_dates[1]::date <= CURRENT_DATE + INTERVAL '${daysToExpiry} days' THEN 'expiring_soon'
+                  ELSE 'fresh'
+                END
+              ELSE 'no_expiry'
+            END as expiry_status
+          FROM inventory_stock_levels sl
+          JOIN inventory_products p ON sl.product_id = p.id
+          LEFT JOIN locations l ON sl.location_id = l.id
+          WHERE ${whereConditions.join(' AND ')}
+            AND (sl.expiry_dates IS NOT NULL OR sl.batch_numbers IS NOT NULL)
+          ORDER BY 
+            CASE 
+              WHEN sl.expiry_dates IS NOT NULL AND array_length(sl.expiry_dates, 1) > 0 THEN
+                sl.expiry_dates[1]::date
+              ELSE '9999-12-31'::date
+            END ASC
+        `;
+
+        const result = await execute_sql(query, queryParams);
+        
+        const lots = result.rows.map((row: any) => ({
+          id: row.id,
+          productId: row.product_id,
+          productName: row.product_name,
+          productCode: row.product_code,
+          locationId: row.location_id,
+          locationName: row.location_name,
+          currentQuantity: row.total_quantity,
+          batchNumbers: row.batch_numbers || [],
+          expiryDates: row.expiry_dates || [],
+          earliestExpiry: row.earliest_expiry,
+          expiryStatus: row.expiry_status,
+          totalValue: parseFloat(row.total_value || '0')
+        }));
+
+        // Calculate summary statistics  
+        const summary = {
+          totalLots: lots.length,
+          expiredLots: lots.filter(lot => lot.expiryStatus === 'expired').length,
+          expiringSoonLots: lots.filter(lot => lot.expiryStatus === 'expiring_soon').length,
+          freshLots: lots.filter(lot => lot.expiryStatus === 'fresh').length,
+          totalExpiredValue: lots
+            .filter(lot => lot.expiryStatus === 'expired')
+            .reduce((sum, lot) => sum + lot.totalValue, 0)
+        };
+
+        const report = {
+          lots,
+          summary,
+          expiryThreshold: daysToExpiry,
+          generatedAt: new Date().toISOString()
+        };
+
+        return {
+          success: true,
+          report,
+          message: `Found ${lots.length} lots with expiry tracking`
+        };
+      },
+      {
+        success: false as const,
+        message: 'Lot expiry report service temporarily unavailable',
+        error: 'Service error'
+      }
+    );
   }
 };
