@@ -1,0 +1,252 @@
+{
+  "id": "restaurant/RestaurantTableKDS",
+  "name": "RestaurantTableKDS", 
+  "sector": "restaurant",
+  "version": "1.0.0",
+  "description": "Comprehensive Kitchen Display System (KDS) for Nigerian restaurants and food service businesses with table management, order queuing, preparation timing, inventory integration, and customer notifications",
+  "channels": ["stable", "canary"],
+  "inputs": {
+    "createTableOrder": {
+      "type": "object",
+      "properties": {
+        "tableId": { "type": "string", "format": "uuid" },
+        "tableNumber": { "type": "string", "maxLength": 20 },
+        "customerId": { "type": "string", "format": "uuid" },
+        "orderItems": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "menuItemId": { "type": "string", "format": "uuid" },
+              "quantity": { "type": "integer", "minimum": 1 },
+              "customizations": { "type": "array", "items": { "type": "string" } },
+              "specialInstructions": { "type": "string", "maxLength": 200 },
+              "price": { "type": "number", "minimum": 0 },
+              "preparationTime": { "type": "integer", "minimum": 0 },
+              "course": { "type": "string", "enum": ["appetizer", "main", "dessert", "beverage", "special"], "default": "main" },
+              "allergens": { "type": "array", "items": { "type": "string" } },
+              "spiceLevel": { "type": "string", "enum": ["none", "mild", "medium", "hot", "extra_hot"], "default": "none" }
+            },
+            "required": ["menuItemId", "quantity", "price"]
+          }
+        },
+        "orderType": { "type": "string", "enum": ["dine_in", "takeout", "delivery"], "default": "dine_in" },
+        "priority": { "type": "string", "enum": ["normal", "rush", "vip"], "default": "normal" },
+        "customerName": { "type": "string", "maxLength": 100 },
+        "phoneNumber": { "type": "string", "maxLength": 20 },
+        "estimatedDeliveryTime": { "type": "string", "format": "date-time" },
+        "specialRequests": { "type": "string", "maxLength": 500 },
+        "paymentStatus": { "type": "string", "enum": ["pending", "partial", "paid"], "default": "pending" },
+        "waiterStaffId": { "type": "string", "format": "uuid" },
+        "locationId": { "type": "string", "format": "uuid" },
+        "notes": { "type": "string", "maxLength": 300 }
+      },
+      "required": ["tableId", "tableNumber", "orderItems", "orderType", "waiterStaffId", "locationId"]
+    },
+    "updateOrderStatus": {
+      "type": "object",
+      "properties": {
+        "orderId": { "type": "string", "format": "uuid" },
+        "status": { "type": "string", "enum": ["pending", "accepted", "preparing", "ready", "served", "completed", "cancelled", "on_hold"] },
+        "kitchenStation": { "type": "string", "enum": ["grill", "fryer", "saute", "salad", "pastry", "beverage", "expedite"] },
+        "estimatedReadyTime": { "type": "string", "format": "date-time" },
+        "actualReadyTime": { "type": "string", "format": "date-time" },
+        "kitchenNotes": { "type": "string", "maxLength": 300 },
+        "chefAssigned": { "type": "string", "format": "uuid" },
+        "updatedBy": { "type": "string", "format": "uuid" },
+        "notifyCustomer": { "type": "boolean", "default": true },
+        "notificationMethod": { "type": "string", "enum": ["sms", "email", "call"], "default": "sms" }
+      },
+      "required": ["orderId", "status", "updatedBy"]
+    },
+    "updateItemStatus": {
+      "type": "object",
+      "properties": {
+        "orderId": { "type": "string", "format": "uuid" },
+        "itemId": { "type": "string", "format": "uuid" },
+        "status": { "type": "string", "enum": ["pending", "preparing", "ready", "served"] },
+        "kitchenStation": { "type": "string", "enum": ["grill", "fryer", "saute", "salad", "pastry", "beverage", "expedite"] },
+        "preparationStartTime": { "type": "string", "format": "date-time" },
+        "preparationEndTime": { "type": "string", "format": "date-time" },
+        "actualPrepTime": { "type": "integer", "minimum": 0 },
+        "notes": { "type": "string", "maxLength": 200 },
+        "updatedBy": { "type": "string", "format": "uuid" }
+      },
+      "required": ["orderId", "itemId", "status", "updatedBy"]
+    },
+    "manageTable": {
+      "type": "object",
+      "properties": {
+        "tableId": { "type": "string", "format": "uuid" },
+        "action": { "type": "string", "enum": ["seat_customers", "clear_table", "reserve", "mark_unavailable", "mark_available"] },
+        "tableNumber": { "type": "string", "maxLength": 20 },
+        "capacity": { "type": "integer", "minimum": 1, "maximum": 20 },
+        "section": { "type": "string", "maxLength": 50 },
+        "status": { "type": "string", "enum": ["available", "occupied", "reserved", "cleaning", "unavailable"] },
+        "partySize": { "type": "integer", "minimum": 1 },
+        "customerName": { "type": "string", "maxLength": 100 },
+        "reservationTime": { "type": "string", "format": "date-time" },
+        "seatedTime": { "type": "string", "format": "date-time" },
+        "waitStaffId": { "type": "string", "format": "uuid" },
+        "notes": { "type": "string", "maxLength": 200 },
+        "updatedBy": { "type": "string", "format": "uuid" }
+      },
+      "required": ["tableId", "action", "updatedBy"]
+    },
+    "checkIngredientAvailability": {
+      "type": "object",
+      "properties": {
+        "menuItemId": { "type": "string", "format": "uuid" },
+        "quantity": { "type": "integer", "minimum": 1 },
+        "locationId": { "type": "string", "format": "uuid" },
+        "includeAlternatives": { "type": "boolean", "default": false }
+      },
+      "required": ["menuItemId", "quantity", "locationId"]
+    },
+    "processPayment": {
+      "type": "object",
+      "properties": {
+        "orderId": { "type": "string", "format": "uuid" },
+        "paymentMethod": { "type": "string", "enum": ["cash", "card", "transfer", "mobile_money", "split"] },
+        "amount": { "type": "number", "minimum": 0 },
+        "currency": { "type": "string", "enum": ["NGN", "USD", "GBP"], "default": "NGN" },
+        "tipAmount": { "type": "number", "minimum": 0, "default": 0 },
+        "splitPayment": {
+          "type": "object",
+          "properties": {
+            "enabled": { "type": "boolean", "default": false },
+            "parties": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "customerId": { "type": "string", "format": "uuid" },
+                  "amount": { "type": "number", "minimum": 0 },
+                  "paymentMethod": { "type": "string" }
+                }
+              }
+            }
+          }
+        },
+        "processedBy": { "type": "string", "format": "uuid" }
+      },
+      "required": ["orderId", "paymentMethod", "amount", "processedBy"]
+    },
+    "generateKitchenReport": {
+      "type": "object",
+      "properties": {
+        "reportType": { "type": "string", "enum": ["daily_orders", "chef_performance", "prep_times", "ingredient_usage", "table_turnover", "waste_tracking"] },
+        "dateFrom": { "type": "string", "format": "date" },
+        "dateTo": { "type": "string", "format": "date" },
+        "locationId": { "type": "string", "format": "uuid" },
+        "kitchenStation": { "type": "string", "enum": ["grill", "fryer", "saute", "salad", "pastry", "beverage", "expedite"] },
+        "staffId": { "type": "string", "format": "uuid" },
+        "includeDetails": { "type": "boolean", "default": true },
+        "format": { "type": "string", "enum": ["json", "pdf", "excel"], "default": "json" }
+      },
+      "required": ["reportType", "dateFrom", "dateTo", "locationId"]
+    },
+    "schedulePreparation": {
+      "type": "object",
+      "properties": {
+        "orderId": { "type": "string", "format": "uuid" },
+        "scheduledStartTime": { "type": "string", "format": "date-time" },
+        "courseTiming": { 
+          "type": "object",
+          "properties": {
+            "appetizer": { "type": "string", "format": "date-time" },
+            "main": { "type": "string", "format": "date-time" },
+            "dessert": { "type": "string", "format": "date-time" }
+          }
+        },
+        "staggerDelay": { "type": "integer", "minimum": 0, "default": 5 },
+        "rushOrder": { "type": "boolean", "default": false },
+        "scheduledBy": { "type": "string", "format": "uuid" }
+      },
+      "required": ["orderId", "scheduledStartTime", "scheduledBy"]
+    }
+  },
+  "outputs": {
+    "createTableOrder": {
+      "type": "object",
+      "properties": {
+        "success": { "type": "boolean" },
+        "order": {
+          "type": "object",
+          "properties": {
+            "id": { "type": "string" },
+            "orderNumber": { "type": "string" },
+            "tableId": { "type": "string" },
+            "tableNumber": { "type": "string" },
+            "status": { "type": "string" },
+            "totalAmount": { "type": "number" },
+            "estimatedReadyTime": { "type": "string", "format": "date-time" },
+            "createdAt": { "type": "string", "format": "date-time" }
+          }
+        },
+        "kitchenTicket": { "type": "object" },
+        "customerReceipt": { "type": "object" },
+        "ingredientReservations": { "type": "array" },
+        "message": { "type": "string" },
+        "error": { "type": "string" }
+      }
+    },
+    "updateOrderStatus": {
+      "type": "object",
+      "properties": {
+        "success": { "type": "boolean" },
+        "order": { "type": "object" },
+        "notification": {
+          "type": "object",
+          "properties": {
+            "sent": { "type": "boolean" },
+            "method": { "type": "string" },
+            "message": { "type": "string" }
+          }
+        },
+        "message": { "type": "string" },
+        "error": { "type": "string" }
+      }
+    },
+    "checkIngredientAvailability": {
+      "type": "object",
+      "properties": {
+        "success": { "type": "boolean" },
+        "available": { "type": "boolean" },
+        "menuItem": { "type": "object" },
+        "ingredients": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "ingredientId": { "type": "string" },
+              "required": { "type": "number" },
+              "available": { "type": "number" },
+              "sufficient": { "type": "boolean" }
+            }
+          }
+        },
+        "alternatives": { "type": "array" },
+        "message": { "type": "string" },
+        "error": { "type": "string" }
+      }
+    }
+  },
+  "actions": [
+    "createTableOrder",
+    "updateOrderStatus",
+    "updateItemStatus", 
+    "manageTable",
+    "checkIngredientAvailability",
+    "getKitchenQueue",
+    "getTableStatus"
+  ],
+  "dependencies": [
+    "sales/SalesEngine",
+    "inventory/InventoryTracking",
+    "inventory/ProductCatalog",
+    "customer/CustomerProfile"
+  ],
+  "created": "2025-09-16T00:00:00Z",
+  "updated": "2025-09-16T00:00:00Z"
+}
