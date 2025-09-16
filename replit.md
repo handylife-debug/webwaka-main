@@ -1,6 +1,6 @@
 # Overview
 
-This is a Next.js 15 multi-tenant application that enables users to create custom subdomains with emoji branding. The platform features a main domain where users can register subdomains (e.g., "mycompany.example.com") and an admin interface for managing tenants. Each subdomain serves as an independent tenant space with its own branding and content.
+This project is a Next.js 15 multi-tenant SaaS application designed to allow users to create custom subdomains with emoji branding. It features a main domain for subdomain registration and an admin interface for tenant management. Each subdomain functions as an independent tenant space, complete with its own branding and content. The platform aims to automate complex business workflows using an advanced "WebWaka Biological Cell System" for modularity and scalability, targeting various business needs including POS, E-commerce, and CRM.
 
 # User Preferences
 
@@ -19,144 +19,76 @@ Preferred communication style: Simple, everyday language.
 
 **Autonomous Workflow**: After completing any task, ALWAYS automatically: (1) Document changes in replit.md, (2) Push to GitHub using creative API solution, (3) Move immediately to next pending task without asking. Keep building continuously until all WebWaka Biological Cells are complete.
 
-# Recent Changes
-
-## WebWaka Biological Cell System Implementation (September 15-16, 2025)
-
-### 🎉 MOD-501-1: Tissue Orchestrator Implementation ✅ COMPLETE (September 16, 2025)
-- **HISTORIC MILESTONE**: Advanced Cell composition system enabling complex business workflows
-- **Complete API Infrastructure**: Full CRUD operations for Tissue definitions with validation
-  - `/api/tissues` - Tissue management with multi-tenant security
-  - `/api/tissues/[id]/execute` - Workflow execution with comprehensive audit logging
-  - `/api/admin/init-tissues` - Production database initialization
-- **Enterprise Security**: Multi-tenant isolation with collision-proof architecture using tenant-scoped keys
-- **Database Architecture**: Hardened schema with foreign keys, constraints, and comprehensive indexing
-- **Production Features**: Complete execution logging, health monitoring, error recovery, transaction safety
-- **Business Value**: Complex Nigerian workflow automation (Customer Onboarding, Sales Processes, Supplier Management)
-- **Architect Approved**: Production-ready with enterprise-grade security and regulatory compliance
-- **Integration Success**: Seamlessly composes all WebWaka Biological Cells (CC-001 through CC-005)
-
-### Core Authentication Cells (Cross-Cutting CC-001) ✅ COMPLETE
-- **AuthenticationCore Cell (CC-001.1)**: Production-ready enterprise authentication with MFA, secure httpOnly cookies, encrypted storage, JWT management, password policies
-- **SocialLoginIntegration Cell (CC-001.2)**: Multi-provider OAuth system supporting Google, GitHub, LinkedIn with secure state verification, CSRF protection, account linking/unlinking, encrypted token storage
-- **JWTTokenManager Cell (CC-001.3)**: Enterprise JWT token management with token families, refresh rotation, revocation tracking, reuse detection, secure cookie lifecycle, production secret enforcement
-
-### Core Payment Cells (Cross-Cutting CC-002) ✅ COMPLETE
-- **PaymentGatewayCore Cell (CC-002.1)**: Enterprise Nigerian payment processing with Paystack, Flutterwave, Interswitch integration, multi-currency support, secure webhooks, HMAC verification, tenant isolation, comprehensive audit logging
-- **SplitPayment Cell (CC-002.2)**: Advanced payment splitting system with installments, layaway, multi-method payments, banker's rounding (IEEE 754), perfect financial reconciliation, production-ready with comprehensive security
-
-### Core Inventory Cells (Cross-Cutting CC-003) ✅ COMPLETE
-- **ProductCatalog Cell (CC-003.1)**: Comprehensive product management with Nigerian market features including multi-currency (NGN/USD/GBP), 7.5% VAT compliance, bulk pricing, unit conversions, supplier management, automated SKU generation, Redis caching, enterprise-grade React UI
-- **InventoryTracking Cell (CC-003.2)**: Multi-location inventory management with real-time stock tracking, automated transfers, FIFO/LIFO/weighted average valuation, stock adjustments with audit trails, low stock alerts, Nigerian business workflows (bulk operations, unit conversions)
-
-### Core Customer/CRM Cells (Cross-Cutting CC-004) ✅ COMPLETE
-- **CustomerProfile Cell (CC-004.1)**: Comprehensive customer data management with Nigerian phone validation, multi-language support (English, Hausa, Yoruba, Igbo), SMS/WhatsApp integration, state/LGA geographic support, mobile-first design, contact/address management, demographics tracking
-- **CustomerEngagement Cell (CC-004.2)**: Advanced loyalty programs with points/tier systems, purchase behavior analytics, Nigerian market insights (cash vs digital tracking, family loyalty programs), engagement scoring, retention campaigns, seasonal marketing for Nigerian holidays, recharts-powered analytics dashboard
-
-### Core Sales/Transaction Processing Cells (Cross-Cutting CC-005) ✅ COMPLETE
-- **SalesEngine Cell (CC-005.1)**: Core POS transaction processing with cart management, Nigerian VAT compliance (7.5%), multi-payment support (cash, card, mobile money, bank transfer), receipt generation with QR codes, offline-first design with UUID session management, enterprise security with JWT authentication and audit logging
-- **TransactionHistory Cell (CC-005.2)**: Comprehensive transaction logging and sales reporting with advanced filtering, refund processing with Nigerian business rules, sales analytics (revenue trends, product/cashier performance), tax compliance reporting (VAT, luxury tax, withholding tax), audit trails for regulatory compliance, report generation in multiple formats
-
-### Legacy Admin Enhancement Cells  
-- **TenantDetails Cell**: Comprehensive tenant detail management with real-time analytics
-- **TenantFeatureToggle Cell**: Professional feature toggle management with persistence
-- **TenantTableEnhanced Cell**: Advanced table with search, filtering, pagination & bulk operations
-- **UserDetails Cell**: Professional user detail management with role controls
-- **PlanDetailsModal Cell**: Complete plan management with analytics integration
-
-### Architecture Achievements
-- **WebWaka Biological System**: Atomic, reusable Cells ready for cross-system deployment (POS, E-commerce, Website Builder, LMS)
-- **Enterprise Security**: AES-256-CBC encryption, httpOnly cookies, required environment variables, zero secret logging
-- **Type Safety**: Comprehensive TypeScript coverage with minimal LSP diagnostics
-- **Performance**: Fast compilation (150-450ms builds), stable Next.js operation
-
-## Phase 6: Modularization (September 16, 2025)
-
-### 🎉 MOD-501.1: UI Component Modularization ✅ COMPLETE (September 16, 2025)
-- **HISTORIC MILESTONE**: Successfully extracted shared UI components into reusable WebWaka Biological Cells
-- **Six New UI Cells Created**:
-  - **StatusBadgeCell** (`/cells/ui/StatusBadge/`) - Consistent status indicators with role, plan, and status type support
-  - **ActionButtonCell** (`/cells/ui/ActionButton/`) - Touch-optimized buttons with loading states, confirmation dialogs, and haptic feedback
-  - **InfoCardCell** (`/cells/ui/InfoCard/`) - Flexible data display cards with metric support and mobile layout optimization
-  - **DataTableCell** (`/cells/ui/DataTable/`) - Mobile-responsive tables with card view fallbacks and touch-friendly actions
-  - **FormFieldCell** (`/cells/ui/FormField/`) - Consistent form inputs with validation support and mobile optimization
-  - **ConfirmDialogCell** (`/cells/ui/ConfirmDialog/`) - Mobile-friendly confirmation dialogs with keyboard navigation
-- **Architecture Compliance**: All cells follow established `/cells/` architecture with proper `cell.json` metadata
-- **Mobile-First Design**: Touch targets (minimum 44px), responsive breakpoints, and mobile card layouts
-- **Integration Success**: Admin components successfully refactored without breaking changes
-  - `admin-users-table.tsx` reduced from 196 to ~130 lines using DataTableCell and StatusBadgeCell
-  - `tenant-data-table.tsx` simplified with mobile card support and reusable components
-- **Quality Assurance**: Zero TypeScript errors, Next.js compiling cleanly, all functionality preserved
-- **Performance Impact**: Eliminated redundant code, improved maintainability, established foundation for consistent UI
-- **Architect Approved**: Production-ready modular UI system ready for further mobile optimization phases
-
 # System Architecture
 
 ## Frontend Architecture
-- **Framework**: Next.js 15 with App Router and React 19
-- **Styling**: Tailwind CSS 4 with shadcn/ui design system components
-- **Component Structure**: Modular components with UI components in `/components/ui/` and admin-specific components in `/components/admin/`
-- **Cell Architecture**: WebWaka Biological system with atomic, reusable Cells in `/cells/admin/` directory
-- **Routing**: Dynamic routing with subdomain detection via middleware for tenant-specific pages
+- **Framework**: Next.js 15 with App Router and React 19.
+- **Styling**: Tailwind CSS 4 with shadcn/ui components.
+- **Component Structure**: Modular "WebWaka Biological Cell System" located in `/cells/`, ensuring atomic, reusable components.
+- **Routing**: Dynamic routing with middleware for subdomain-based tenant detection.
 
 ## Backend Architecture
-- **Server Actions**: Next.js server actions for form handling and data mutations
-- **Middleware**: Custom middleware (`middleware.ts`) for subdomain extraction and routing logic
-- **Authentication**: Mock authentication system with role-based access control (SuperAdmin, Admin, User)
-- **Data Storage**: PostgreSQL database for structured data with Redis caching for tenant data using Upstash Redis
+- **Server Actions**: Next.js server actions for data mutations and form handling.
+- **Middleware**: Custom `middleware.ts` for subdomain extraction and routing.
+- **Authentication**: Role-based access control (SuperAdmin, Admin, User) with a mock authentication system for demo purposes.
+- **Data Storage**: PostgreSQL for structured data; Redis (Upstash) for caching and tenant-specific data.
 
 ## Multi-Tenant Implementation
-- **Subdomain Routing**: Automatic subdomain detection supporting both local development (`subdomain.localhost:3000`) and production environments
-- **Tenant Isolation**: Each subdomain serves isolated content while sharing core application infrastructure
-- **Admin Panel**: Protected admin interface at `/admin` with tenant management and partner onboarding capabilities
-- **Vercel Preview Support**: Special handling for Vercel preview deployments with subdomain format `tenant---branch.vercel.app`
+- **Subdomain Routing**: Automatic detection and routing for tenant-specific subdomains in both development and production.
+- **Tenant Isolation**: Shared core infrastructure with isolated content per subdomain.
+- **Admin Panel**: Protected `/admin` interface for tenant and partner management.
 
 ## Authentication & Authorization
-- **Role-Based Access**: Three-tier role system (SuperAdmin, Admin, User) with hierarchical permissions
-- **Mock Implementation**: Simplified authentication for demo purposes with hardcoded credentials
-- **Server-Side Protection**: Route protection using server-side user validation in admin layouts
-- **Session Management**: Cookie-based session handling for authentication state
+- **Role-Based Access**: Three-tier system (SuperAdmin, Admin, User) with hierarchical permissions.
+- **Session Management**: Cookie-based sessions.
 
 ## Data Management
-- **Redis Storage**: Tenant data stored in Redis with keys like `subdomain:tenantname`
-- **Server Actions**: Form submissions handled via Next.js server actions for subdomain creation and management
-- **Data Validation**: Input sanitization and emoji validation for tenant customization
-- **Error Handling**: Graceful error handling with user-friendly error messages
+- **Redis Storage**: Tenant data and caching via Upstash Redis.
+- **Server Actions**: Handling form submissions for subdomain creation and management.
+- **Data Validation**: Input sanitization, including emoji validation.
 
 ## Partner Management System
-- **Partner Onboarding**: Public partner registration at `/partner-registration` with comprehensive application form
-- **Application Workflow**: SuperAdmin approval system with detailed application review and status tracking
-- **Partnership Levels**: Multi-tier partner system (Bronze, Silver, Gold, Platinum) with commission tracking
-- **Referral System**: Complete referral tracking with commission calculations and activity logging
-- **SuperAdmin Controls**: Dedicated interface for managing partner applications, approvals, and rejections
+- **Partner Onboarding**: Public registration flow at `/partner-registration`.
+- **Application Workflow**: SuperAdmin approval process for partner applications.
+- **Partnership Levels**: Multi-tier system (Bronze, Silver, Gold, Platinum) with commission tracking.
+
+## Core Feature Specifications (WebWaka Biological Cell System)
+- **Authentication Cells (CC-001)**: Enterprise authentication with MFA, OAuth (Google, GitHub, LinkedIn), and robust JWT management.
+- **Payment Cells (CC-002)**: Nigerian payment gateway integration (Paystack, Flutterwave, Interswitch) with multi-currency and split payment capabilities.
+- **Inventory Cells (CC-003)**: Comprehensive product catalog and multi-location inventory tracking with Nigerian market features (VAT, bulk pricing).
+- **Customer/CRM Cells (CC-004)**: Customer data management with Nigerian localization, SMS/WhatsApp integration, and advanced loyalty programs.
+- **Sales/Transaction Processing Cells (CC-005)**: POS transaction processing with Nigerian VAT compliance, multi-payment support, and comprehensive sales reporting.
+- **Tissue Orchestrator (MOD-501-1)**: Advanced cell composition system for complex business workflows, providing API infrastructure for CRUD operations and workflow execution with multi-tenant security.
+- **UI Component Modularization (MOD-501.1)**: Extracted reusable UI components (e.g., StatusBadgeCell, ActionButtonCell, DataTableCell) following a mobile-first design.
+- **Tenant Management Modularization (MOD-501.2)**: Modularized tenant management into dedicated cells for registration, configuration, analytics, billing, and security.
 
 # External Dependencies
 
 ## Core Framework
-- **Next.js 15**: React framework with App Router
-- **React 19**: UI library with latest features
-- **TypeScript**: Type safety across the application
+- **Next.js 15**: React framework.
+- **React 19**: UI library.
+- **TypeScript**: Type safety.
 
 ## Database & Storage
-- **PostgreSQL**: Primary database for structured data including partner applications and tenant management
-- **Drizzle ORM**: Type-safe database ORM with schema management
-- **Upstash Redis**: Cloud Redis service for tenant data storage and caching
-- **@upstash/redis**: Redis client library for data operations
+- **PostgreSQL**: Primary relational database.
+- **Drizzle ORM**: Type-safe ORM.
+- **Upstash Redis**: Cloud Redis for caching and tenant data.
+- **@upstash/redis**: Redis client library.
 
 ## UI & Styling
-- **Tailwind CSS 4**: Utility-first CSS framework
-- **shadcn/ui**: Component library built on Radix UI primitives
-- **Radix UI**: Accessible component primitives for dialogs, dropdowns, labels, etc.
-- **Lucide React**: Icon library for consistent iconography
-- **frimousse**: Emoji picker component for tenant customization
+- **Tailwind CSS 4**: Utility-first CSS.
+- **shadcn/ui**: Component library based on Radix UI.
+- **Radix UI**: Accessible component primitives.
+- **Lucide React**: Icon library.
+- **frimousse**: Emoji picker.
 
 ## Development & Analytics
-- **Vercel Analytics**: Performance and usage analytics
-- **Vercel Speed Insights**: Performance monitoring
-- **class-variance-authority**: Utility for component variant management
-- **clsx & tailwind-merge**: Conditional styling utilities
+- **Vercel Analytics**: Performance and usage analytics.
+- **Vercel Speed Insights**: Performance monitoring.
+- **class-variance-authority**: Component variant management.
+- **clsx & tailwind-merge**: Styling utilities.
 
-## Environment Configuration
-- **Environment Variables**: `KV_REST_API_URL`, `KV_REST_API_TOKEN` for Redis connection
-- **Domain Configuration**: `NEXT_PUBLIC_ROOT_DOMAIN` for multi-tenant routing
-- **Development Setup**: Local subdomain support with `*.localhost` configuration
+## Integrations (Specific to WebWaka Biological Cells)
+- **Paystack, Flutterwave, Interswitch**: Nigerian payment gateways.
+- **Google, GitHub, LinkedIn**: OAuth providers for social login.
+- **Octokit (`@octokit/rest`)**: GitHub API integration for pushing code.
