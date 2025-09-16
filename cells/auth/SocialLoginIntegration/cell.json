@@ -1,0 +1,283 @@
+{
+  "name": "SocialLoginIntegration",
+  "version": "1.0.0",
+  "description": "OAuth social login integration Cell supporting Google, GitHub, LinkedIn, and other providers with secure token management",
+  "type": "cross-cutting",
+  "category": "authentication",
+  "tags": ["oauth", "social-login", "authentication", "security"],
+  "author": "WebWaka",
+  "license": "MIT",
+  "dependencies": {
+    "cells": [
+      "auth/AuthenticationCore"
+    ],
+    "external": [
+      "@octokit/rest",
+      "google-auth-library", 
+      "jsonwebtoken",
+      "bcrypt"
+    ]
+  },
+  "inputs": {
+    "authenticate": {
+      "type": "object",
+      "properties": {
+        "provider": {
+          "type": "string",
+          "enum": ["google", "github", "linkedin", "replit"],
+          "description": "OAuth provider for authentication"
+        },
+        "authCode": {
+          "type": "string",
+          "description": "Authorization code from OAuth provider"
+        },
+        "redirectUri": {
+          "type": "string",
+          "description": "Redirect URI for OAuth flow"
+        },
+        "tenantId": {
+          "type": "string",
+          "optional": true,
+          "description": "Tenant context for multi-tenant apps"
+        }
+      },
+      "required": ["provider", "authCode", "redirectUri"]
+    },
+    "getAuthUrl": {
+      "type": "object", 
+      "properties": {
+        "provider": {
+          "type": "string",
+          "enum": ["google", "github", "linkedin", "replit"],
+          "description": "OAuth provider"
+        },
+        "redirectUri": {
+          "type": "string",
+          "description": "Callback URL after authentication"
+        },
+        "scopes": {
+          "type": "array",
+          "items": { "type": "string" },
+          "optional": true,
+          "description": "OAuth scopes to request"
+        },
+        "state": {
+          "type": "string",
+          "optional": true,
+          "description": "State parameter for security"
+        }
+      },
+      "required": ["provider", "redirectUri"]
+    },
+    "linkAccount": {
+      "type": "object",
+      "properties": {
+        "userId": {
+          "type": "string",
+          "description": "Existing user ID to link social account to"
+        },
+        "provider": {
+          "type": "string",
+          "enum": ["google", "github", "linkedin", "replit"],
+          "description": "Social provider to link"
+        },
+        "authCode": {
+          "type": "string",
+          "description": "Authorization code from provider"
+        },
+        "redirectUri": {
+          "type": "string",
+          "description": "OAuth redirect URI"
+        }
+      },
+      "required": ["userId", "provider", "authCode", "redirectUri"]
+    },
+    "unlinkAccount": {
+      "type": "object",
+      "properties": {
+        "userId": {
+          "type": "string",
+          "description": "User ID to unlink account from"
+        },
+        "provider": {
+          "type": "string",
+          "enum": ["google", "github", "linkedin", "replit"],
+          "description": "Provider to unlink"
+        }
+      },
+      "required": ["userId", "provider"]
+    },
+    "getLinkedAccounts": {
+      "type": "object",
+      "properties": {
+        "userId": {
+          "type": "string",
+          "description": "User ID to get linked accounts for"
+        }
+      },
+      "required": ["userId"]
+    }
+  },
+  "outputs": {
+    "authenticate": {
+      "type": "object",
+      "properties": {
+        "success": { "type": "boolean" },
+        "message": { "type": "string" },
+        "data": {
+          "type": "object",
+          "properties": {
+            "user": {
+              "type": "object",
+              "properties": {
+                "id": { "type": "string" },
+                "email": { "type": "string" },
+                "name": { "type": "string" },
+                "avatar": { "type": "string", "optional": true },
+                "provider": { "type": "string" },
+                "providerId": { "type": "string" },
+                "isNewUser": { "type": "boolean" }
+              }
+            },
+            "sessionToken": { "type": "string" },
+            "refreshToken": { "type": "string" },
+            "expiresAt": { "type": "string" }
+          }
+        }
+      }
+    },
+    "getAuthUrl": {
+      "type": "object", 
+      "properties": {
+        "success": { "type": "boolean" },
+        "message": { "type": "string" },
+        "data": {
+          "type": "object",
+          "properties": {
+            "authUrl": { "type": "string" },
+            "state": { "type": "string" }
+          }
+        }
+      }
+    },
+    "linkAccount": {
+      "type": "object",
+      "properties": {
+        "success": { "type": "boolean" },
+        "message": { "type": "string" },
+        "data": {
+          "type": "object",
+          "properties": {
+            "provider": { "type": "string" },
+            "linked": { "type": "boolean" },
+            "providerData": {
+              "type": "object",
+              "properties": {
+                "email": { "type": "string" },
+                "name": { "type": "string" },
+                "avatar": { "type": "string", "optional": true }
+              }
+            }
+          }
+        }
+      }
+    },
+    "unlinkAccount": {
+      "type": "object",
+      "properties": {
+        "success": { "type": "boolean" },
+        "message": { "type": "string" },
+        "data": {
+          "type": "object",
+          "properties": {
+            "provider": { "type": "string" },
+            "unlinked": { "type": "boolean" }
+          }
+        }
+      }
+    },
+    "getLinkedAccounts": {
+      "type": "object",
+      "properties": {
+        "success": { "type": "boolean" },
+        "message": { "type": "string" },
+        "data": {
+          "type": "object",
+          "properties": {
+            "linkedAccounts": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "provider": { "type": "string" },
+                  "email": { "type": "string" },
+                  "name": { "type": "string" },
+                  "avatar": { "type": "string", "optional": true },
+                  "linkedAt": { "type": "string" }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "configuration": {
+    "providers": {
+      "google": {
+        "clientId": {
+          "type": "env",
+          "variable": "GOOGLE_CLIENT_ID",
+          "required": true
+        },
+        "clientSecret": {
+          "type": "env", 
+          "variable": "GOOGLE_CLIENT_SECRET",
+          "required": true
+        },
+        "scopes": ["openid", "email", "profile"]
+      },
+      "github": {
+        "clientId": {
+          "type": "env",
+          "variable": "GITHUB_CLIENT_ID", 
+          "required": true
+        },
+        "clientSecret": {
+          "type": "env",
+          "variable": "GITHUB_CLIENT_SECRET",
+          "required": true
+        },
+        "scopes": ["user:email"]
+      },
+      "linkedin": {
+        "clientId": {
+          "type": "env",
+          "variable": "LINKEDIN_CLIENT_ID",
+          "required": true
+        },
+        "clientSecret": {
+          "type": "env",
+          "variable": "LINKEDIN_CLIENT_SECRET", 
+          "required": true
+        },
+        "scopes": ["r_liteprofile", "r_emailaddress"]
+      },
+      "replit": {
+        "integrated": true,
+        "description": "Uses Replit's built-in OAuth integration"
+      }
+    }
+  },
+  "security": {
+    "encryption": {
+      "providerTokens": "AES-256-CBC",
+      "refreshTokens": "bcrypt"
+    },
+    "validation": {
+      "stateParameter": true,
+      "nonce": true,
+      "redirectUriValidation": true
+    }
+  }
+}
