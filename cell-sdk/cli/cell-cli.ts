@@ -255,12 +255,14 @@ tissueCommand
   .command('register')
   .description('Register a Tissue composition')
   .argument('<tissueFile>', 'Tissue definition file (tissue.json)')
-  .action(async (tissueFile: string) => {
+  .requiredOption('--tenant <tenantId>', 'Tenant ID for security scoping')
+  .action(async (tissueFile: string, options: any) => {
     try {
       const tissueDefinition = JSON.parse(await fs.readFile(tissueFile, 'utf-8'));
-      await tissueOrchestrator.registerTissue(tissueDefinition);
+      // SECURITY FIX: Register with proper tenant scoping
+      await tissueOrchestrator.registerTissue(options.tenant, tissueDefinition);
       
-      console.log(`✅ Registered Tissue ${tissueDefinition.id}`);
+      console.log(`✅ Registered Tissue ${tissueDefinition.id} for tenant ${options.tenant}`);
       console.log(`   Steps: ${tissueDefinition.steps.length}`);
     } catch (error) {
       console.error('❌ Error registering Tissue:', error instanceof Error ? error.message : error);
@@ -272,13 +274,15 @@ tissueCommand
   .command('execute')
   .description('Execute a Tissue composition')
   .requiredOption('--tissue <tissueId>', 'Tissue ID to execute')
+  .requiredOption('--tenant <tenantId>', 'Tenant ID for security scoping')
   .option('--input <json>', 'Input data as JSON string', '{}')
   .action(async (options: any) => {
     try {
       const input = JSON.parse(options.input);
-      const result = await tissueOrchestrator.executeTissue(options.tissue, input);
+      // SECURITY FIX: Execute with proper tenant scoping
+      const result = await tissueOrchestrator.executeTissue(options.tenant, options.tissue, input);
       
-      console.log(`✅ Executed Tissue ${options.tissue}`);
+      console.log(`✅ Executed Tissue ${options.tissue} for tenant ${options.tenant}`);
       console.log(`   Duration: ${result.duration}ms`);
       console.log(`   Output:`, JSON.stringify(result.output, null, 2));
     } catch (error) {
@@ -291,15 +295,17 @@ tissueCommand
   .command('health')
   .description('Check Tissue health')
   .requiredOption('--tissue <tissueId>', 'Tissue ID to check')
+  .requiredOption('--tenant <tenantId>', 'Tenant ID for security scoping')
   .action(async (options: any) => {
     try {
-      const health = await tissueOrchestrator.getTissueHealth(options.tissue);
+      // SECURITY FIX: Check health with proper tenant scoping
+      const health = await tissueOrchestrator.getTissueHealth(options.tenant, options.tissue);
       
       const statusIcon = health.status === 'healthy' ? '✅' : 
                         health.status === 'degraded' ? '⚠️' : 
                         health.status === 'failed' ? '❌' : '❓';
       
-      console.log(`${statusIcon} Tissue ${options.tissue}: ${health.status}`);
+      console.log(`${statusIcon} Tissue ${options.tissue} (tenant ${options.tenant}): ${health.status}`);
       console.log(`   ${health.message}`);
       
       if (health.totalExecutions) {
@@ -315,11 +321,13 @@ tissueCommand
 program
   .command('status')
   .description('Show WebWaka system status')
-  .action(async () => {
+  .requiredOption('--tenant <tenantId>', 'Tenant ID for security scoping')
+  .action(async (options: any) => {
     try {
-      const compositions = tissueOrchestrator.listCompositions();
+      // SECURITY FIX: List compositions with proper tenant scoping
+      const compositions = tissueOrchestrator.listCompositions(options.tenant);
       
-      console.log('🧬 WebWaka Biological Hierarchical System Status\n');
+      console.log(`🧬 WebWaka Biological Hierarchical System Status (Tenant: ${options.tenant})\n`);
       console.log(`📊 Registered Compositions:`);
       console.log(`   Tissues: ${compositions.tissues.length}`);
       console.log(`   Organs: ${compositions.organs.length}`);
@@ -328,7 +336,8 @@ program
         console.log('\n🦠 Active Tissues:');
         for (const tissueId of compositions.tissues) {
           try {
-            const health = await tissueOrchestrator.getTissueHealth(tissueId);
+            // SECURITY FIX: Check health with proper tenant scoping
+            const health = await tissueOrchestrator.getTissueHealth(options.tenant, tissueId);
             const statusIcon = health.status === 'healthy' ? '✅' : 
                               health.status === 'degraded' ? '⚠️' : 
                               health.status === 'failed' ? '❌' : '❓';
