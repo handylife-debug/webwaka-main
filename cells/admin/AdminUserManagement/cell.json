@@ -1,0 +1,84 @@
+{
+  "id": "admin/AdminUserManagement",
+  "name": "AdminUserManagement", 
+  "sector": "admin",
+  "version": "1.0.0",
+  "description": "Comprehensive admin user management with user creation, role management, permission handling, and user lifecycle operations",
+  "channels": ["stable", "canary"],
+  "inputs": {
+    "createUser": {
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "email": { "type": "string" },
+        "role": { "type": "string" },
+        "permissions": { "type": "array" },
+        "invitedBy": { "type": "string" }
+      },
+      "required": ["name", "email", "role", "invitedBy"]
+    },
+    "updateUserRole": {
+      "type": "object", 
+      "properties": {
+        "userId": { "type": "string" },
+        "newRole": { "type": "string" },
+        "updatedBy": { "type": "string" }
+      },
+      "required": ["userId", "newRole", "updatedBy"]
+    },
+    "updateUserStatus": {
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "status": { "type": "string" },
+        "reason": { "type": "string" },
+        "updatedBy": { "type": "string" }
+      },
+      "required": ["userId", "status", "updatedBy"]
+    },
+    "getUserManagementStats": {
+      "type": "object",
+      "properties": {
+        "timeRange": { "type": "string" }
+      }
+    }
+  },
+  "outputs": {
+    "createUser": {
+      "type": "object",
+      "properties": {
+        "success": { "type": "boolean" },
+        "userId": { "type": "string" },
+        "message": { "type": "string" }
+      }
+    },
+    "updateUserRole": {
+      "type": "object",
+      "properties": {
+        "success": { "type": "boolean" },
+        "message": { "type": "string" }
+      }
+    },
+    "updateUserStatus": {
+      "type": "object",
+      "properties": {
+        "success": { "type": "boolean" },
+        "message": { "type": "string" }
+      }
+    },
+    "getUserManagementStats": {
+      "type": "object",
+      "properties": {
+        "totalUsers": { "type": "number" },
+        "activeUsers": { "type": "number" },
+        "pendingInvitations": { "type": "number" },
+        "roleDistribution": { "type": "object" },
+        "recentActivity": { "type": "array" }
+      }
+    }
+  },
+  "actions": ["createUser", "updateUserRole", "updateUserStatus", "getUserManagementStats", "sendInvitation", "revokeAccess"],
+  "dependencies": ["redis", "user-management", "replitmail"],
+  "created": "2025-09-16T00:00:00Z",
+  "updated": "2025-09-16T00:00:00Z"
+}
