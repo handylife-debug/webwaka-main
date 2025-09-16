@@ -44,6 +44,36 @@ export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
   const subdomain = extractSubdomain(request);
 
+  // CSRF Protection for mutating operations on API routes
+  if (request.method !== 'GET' && request.method !== 'HEAD' && pathname.startsWith('/api/')) {
+    const csrfToken = request.headers.get('x-csrf-token');
+    
+    if (!csrfToken) {
+      return NextResponse.json(
+        { success: false, message: 'CSRF token required' },
+        { status: 403 }
+      );
+    }
+
+    try {
+      const { validateCSRFToken } = await import('@/lib/auth-secure');
+      const isValidCSRF = await validateCSRFToken(csrfToken);
+      
+      if (!isValidCSRF) {
+        return NextResponse.json(
+          { success: false, message: 'Invalid CSRF token' },
+          { status: 403 }
+        );
+      }
+    } catch (error) {
+      console.error('CSRF validation error:', error);
+      return NextResponse.json(
+        { success: false, message: 'CSRF validation failed' },
+        { status: 403 }
+      );
+    }
+  }
+
   if (subdomain) {
     // Block access to admin page from subdomains
     if (pathname.startsWith('/admin')) {
@@ -58,9 +88,35 @@ export async function middleware(request: NextRequest) {
 
   // SuperAdmin route protection - check if trying to access admin routes
   if (pathname.startsWith('/admin') && !subdomain) {
-    // In a real app, you'd check session/JWT here
-    // For now, we'll let the layout component handle the redirect
-    // This is where you'd implement proper server-side auth checking
+    // Enhanced auth checking with secure authentication
+    try {
+      const { getAuthenticatedUser } = await import('@/lib/auth-secure');
+      const user = await getAuthenticatedUser();
+      
+      if (!user || (user.role !== 'Admin' && user.role !== 'SuperAdmin')) {
+        return NextResponse.redirect(new URL('/login', request.url));
+      }
+    } catch (error) {
+      console.error('Auth check error in middleware:', error);
+      return NextResponse.redirect(new URL('/login', request.url));
+    }
+  }
+
+  // Add CSRF token to response headers for authenticated users on API routes
+  if (pathname.startsWith('/api/')) {
+    try {
+      const { getAuthenticatedUser, generateCSRFToken } = await import('@/lib/auth-secure');
+      const user = await getAuthenticatedUser();
+      if (user) {
+        const csrfToken = await generateCSRFToken();
+        const response = NextResponse.next();
+        response.headers.set('X-CSRF-Token', csrfToken);
+        return response;
+      }
+    } catch (error) {
+      // Continue without CSRF token if there's an error
+      console.error('Error generating CSRF token:', error);
+    }
   }
 
   // On the root domain, allow normal access
@@ -70,11 +126,9 @@ export async function middleware(request: NextRequest) {
 export const config = {
   matcher: [
     /*
-     * Match all paths except for:
-     * 1. /api routes
-     * 2. /_next (Next.js internals)
-     * 3. all root files inside /public (e.g. /favicon.ico)
+     * Match all paths including API routes for CSRF protection
+     * Exclude Next.js internals and static files
      */
-    '/((?!api|_next|[\\w-]+\\.\\w+).*)'
+    '/((?!_next|[\\w-]+\\.\\w+).*)'
   ]
 };
