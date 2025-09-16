@@ -1,0 +1,162 @@
+{
+  "id": "ecommerce/B2BAccessControl",
+  "name": "B2BAccessControl",
+  "sector": "ecommerce",
+  "version": "1.0.0",
+  "description": "B2B access control system with guest price hiding, category restrictions, and group permissions. 100% cellular reusability extending AuthenticationCore and permission-middleware systems",
+  "channels": ["stable", "canary"],
+  "inputs": {
+    "checkGuestPriceAccess": {
+      "type": "object",
+      "properties": {
+        "productId": { "type": "string" },
+        "categoryId": { "type": "string", "optional": true },
+        "userId": { "type": "string", "optional": true }
+      },
+      "required": ["productId"]
+    },
+    "checkCategoryAccess": {
+      "type": "object",
+      "properties": {
+        "categoryId": { "type": "string" },
+        "userId": { "type": "string", "optional": true }
+      },
+      "required": ["categoryId"]
+    },
+    "assignUserToB2BGroup": {
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "groupId": { "type": "string" },
+        "effectiveDate": { "type": "string", "format": "date", "optional": true },
+        "expiryDate": { "type": "string", "format": "date", "optional": true }
+      },
+      "required": ["userId", "groupId"]
+    },
+    "createB2BGroup": {
+      "type": "object",
+      "properties": {
+        "groupName": { "type": "string" },
+        "description": { "type": "string", "optional": true },
+        "priceVisibility": { "type": "string", "enum": ["hidden", "visible", "partial"] },
+        "allowedCategories": { "type": "array", "items": { "type": "string" } },
+        "restrictedCategories": { "type": "array", "items": { "type": "string" } },
+        "groupType": { "type": "string", "enum": ["wholesale", "retail", "vip", "employee", "guest"] }
+      },
+      "required": ["groupName", "priceVisibility", "groupType"]
+    },
+    "updatePriceVisibilitySettings": {
+      "type": "object",
+      "properties": {
+        "hideFromGuests": { "type": "boolean" },
+        "hidePriceText": { "type": "string", "optional": true },
+        "loginPromptText": { "type": "string", "optional": true },
+        "guestMessage": { "type": "string", "optional": true }
+      },
+      "required": ["hideFromGuests"]
+    }
+  },
+  "outputs": {
+    "checkGuestPriceAccess": {
+      "type": "object",
+      "properties": {
+        "success": { "type": "boolean" },
+        "canViewPrice": { "type": "boolean" },
+        "canViewProduct": { "type": "boolean" },
+        "restrictionReason": { "type": "string", "optional": true },
+        "alternativeMessage": { "type": "string", "optional": true },
+        "loginRequired": { "type": "boolean" },
+        "groupRequired": { "type": "boolean" }
+      }
+    },
+    "checkCategoryAccess": {
+      "type": "object",
+      "properties": {
+        "success": { "type": "boolean" },
+        "hasAccess": { "type": "boolean" },
+        "restrictionLevel": { "type": "string", "enum": ["none", "partial", "full"] },
+        "restrictionReason": { "type": "string", "optional": true },
+        "allowedActions": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "assignUserToB2BGroup": {
+      "type": "object",
+      "properties": {
+        "success": { "type": "boolean" },
+        "membershipId": { "type": "string" },
+        "effectivePermissions": { "type": "array", "items": { "type": "string" } },
+        "message": { "type": "string" }
+      }
+    },
+    "createB2BGroup": {
+      "type": "object",
+      "properties": {
+        "success": { "type": "boolean" },
+        "groupId": { "type": "string" },
+        "groupDetails": {
+          "type": "object",
+          "properties": {
+            "groupName": { "type": "string" },
+            "memberCount": { "type": "number" },
+            "permissions": { "type": "array", "items": { "type": "string" } }
+          }
+        },
+        "message": { "type": "string" }
+      }
+    },
+    "updatePriceVisibilitySettings": {
+      "type": "object",
+      "properties": {
+        "success": { "type": "boolean" },
+        "updatedSettings": {
+          "type": "object",
+          "properties": {
+            "hideFromGuests": { "type": "boolean" },
+            "hidePriceText": { "type": "string" },
+            "loginPromptText": { "type": "string" },
+            "guestMessage": { "type": "string" }
+          }
+        },
+        "message": { "type": "string" }
+      }
+    }
+  },
+  "actions": [
+    "checkGuestPriceAccess",
+    "checkCategoryAccess", 
+    "assignUserToB2BGroup",
+    "removeUserFromB2BGroup",
+    "createB2BGroup",
+    "updateB2BGroup",
+    "deleteB2BGroup",
+    "listB2BGroups",
+    "getB2BGroupMembers",
+    "updatePriceVisibilitySettings",
+    "getPriceVisibilitySettings",
+    "checkUserB2BStatus",
+    "getBulkCategoryAccess",
+    "auditB2BAccess",
+    "generateAccessReport",
+    "syncB2BPermissions",
+    "validateGroupHierarchy",
+    "getGroupPermissionMatrix",
+    "checkProductLineAccess",
+    "updateCategoryRestrictions"
+  ],
+  "dependencies": [
+    "auth/AuthenticationCore",
+    "lib/permission-middleware",
+    "lib/user-management"
+  ],
+  "reusability": {
+    "extends": [
+      "auth/AuthenticationCore",
+      "permission-middleware system",
+      "multi-tenant user management"
+    ],
+    "composition": "100% cellular reuse - no duplicate functionality",
+    "integration": "Seamless integration with existing authentication and role systems"
+  },
+  "created": "2025-09-16T11:30:00Z",
+  "updated": "2025-09-16T11:30:00Z"
+}

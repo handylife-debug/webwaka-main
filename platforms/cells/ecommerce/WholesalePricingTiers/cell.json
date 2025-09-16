@@ -1,0 +1,160 @@
+{
+  "id": "ecommerce/WholesalePricingTiers",
+  "name": "WholesalePricingTiers", 
+  "sector": "ecommerce",
+  "version": "1.0.0",
+  "description": "Advanced wholesale pricing with dynamic tiers, quantity discounts, and B2B group-specific pricing rules",
+  "channels": ["stable", "canary"],
+  "reusabilityNote": "100% CELLULAR REUSABILITY: Extends existing inventory/TaxAndFee Cell and integrates with ecommerce/B2BAccessControl Cell",
+  "dependencies": [
+    "inventory/TaxAndFee",
+    "ecommerce/B2BAccessControl"
+  ],
+  "inputs": {
+    "calculateWholesalePrice": {
+      "type": "object",
+      "properties": {
+        "basePrice": { "type": "number", "minimum": 0 },
+        "quantity": { "type": "number", "minimum": 1 },
+        "productId": { "type": "string" },
+        "categoryId": { "type": "string" },
+        "userId": { "type": "string", "description": "B2B customer user ID" },
+        "groupId": { "type": "string", "description": "B2B group for pricing rules" },
+        "territory": { "type": "string", "description": "Nigerian territory for regional pricing" },
+        "currency": { "type": "string", "default": "NGN" },
+        "paymentTerms": { "type": "string", "enum": ["immediate", "net_7", "net_15", "net_30", "net_45", "net_60"] },
+        "tenantId": { "type": "string", "description": "Tenant ID for multi-tenant isolation" }
+      },
+      "required": ["basePrice", "quantity", "productId", "tenantId"]
+    },
+    "createPricingTier": {
+      "type": "object", 
+      "properties": {
+        "groupId": { "type": "string" },
+        "productId": { "type": "string" },
+        "categoryId": { "type": "string" },
+        "minQuantity": { "type": "number", "minimum": 1 },
+        "maxQuantity": { "type": "number" },
+        "discountType": { "type": "string", "enum": ["percentage", "fixed_amount", "fixed_price"] },
+        "discountValue": { "type": "number", "minimum": 0 },
+        "territory": { "type": "string" },
+        "effectiveDate": { "type": "string", "format": "date-time" },
+        "expiryDate": { "type": "string", "format": "date-time" },
+        "paymentTermsDiscount": { "type": "number", "minimum": 0, "maximum": 0.5 },
+        "tenantId": { "type": "string", "description": "Tenant ID for multi-tenant isolation" }
+      },
+      "required": ["minQuantity", "discountType", "discountValue", "tenantId"]
+    },
+    "getBulkPricingMatrix": {
+      "type": "object",
+      "properties": {
+        "productIds": { "type": "array", "items": { "type": "string" } },
+        "groupId": { "type": "string" },
+        "territory": { "type": "string" },
+        "currency": { "type": "string", "default": "NGN" },
+        "tenantId": { "type": "string", "description": "Tenant ID for multi-tenant isolation" }
+      },
+      "required": ["productIds", "tenantId"]
+    }
+  },
+  "outputs": {
+    "calculateWholesalePrice": {
+      "type": "object",
+      "properties": {
+        "originalPrice": { "type": "number" },
+        "wholesalePrice": { "type": "number" },
+        "totalSavings": { "type": "number" },
+        "unitPrice": { "type": "number" },
+        "appliedTier": {
+          "type": "object",
+          "properties": {
+            "minQuantity": { "type": "number" },
+            "maxQuantity": { "type": "number" },
+            "discountType": { "type": "string" },
+            "discountValue": { "type": "number" },
+            "description": { "type": "string" }
+          }
+        },
+        "taxCalculation": {
+          "type": "object",
+          "description": "Integrated TaxAndFee Cell calculation results"
+        },
+        "paymentTermsDiscount": { "type": "number" },
+        "territoryAdjustment": { "type": "number" },
+        "currency": { "type": "string" },
+        "breakdown": {
+          "type": "object",
+          "properties": {
+            "baseAmount": { "type": "number" },
+            "quantityDiscount": { "type": "number" },
+            "groupDiscount": { "type": "number" },
+            "territoryDiscount": { "type": "number" },
+            "paymentDiscount": { "type": "number" },
+            "finalAmount": { "type": "number" }
+          }
+        }
+      }
+    },
+    "createPricingTier": {
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "status": { "type": "string" },
+        "message": { "type": "string" }
+      }
+    },
+    "getBulkPricingMatrix": {
+      "type": "object",
+      "properties": {
+        "matrix": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "productId": { "type": "string" },
+              "productName": { "type": "string" },
+              "basePrice": { "type": "number" },
+              "tiers": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "minQuantity": { "type": "number" },
+                    "maxQuantity": { "type": "number" },
+                    "unitPrice": { "type": "number" },
+                    "discount": { "type": "number" },
+                    "savings": { "type": "number" }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "currency": { "type": "string" },
+        "territory": { "type": "string" }
+      }
+    }
+  },
+  "actions": [
+    "calculateWholesalePrice",
+    "createPricingTier", 
+    "updatePricingTier",
+    "deletePricingTier",
+    "getPricingTiers",
+    "getBulkPricingMatrix",
+    "validatePricingConfiguration",
+    "generatePricingReport",
+    "getSeasonalPricingAdjustments",
+    "manageTerritoryPricing"
+  ],
+  "nigerianMarketFeatures": {
+    "currency": "NGN",
+    "territories": ["Lagos", "Abuja", "Port Harcourt", "Kano", "Ibadan", "Benin", "Kaduna", "Warri", "Jos", "Maiduguri"],
+    "paymentMethods": ["bank_transfer", "pos", "mobile_money", "cheque", "cash"],
+    "taxIntegration": "7.5% VAT applied via TaxAndFee Cell extension",
+    "businessRegistration": "CAC registration validation for wholesale accounts",
+    "complianceFeatures": ["tax_invoice_generation", "withholding_tax_calculation", "vat_reporting"]
+  },
+  "created": "2025-09-16T11:34:00Z",
+  "updated": "2025-09-16T11:34:00Z"
+}

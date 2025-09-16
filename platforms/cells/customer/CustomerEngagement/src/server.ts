@@ -18,7 +18,7 @@ export interface LoyaltyProfile {
   currentPoints: number;
   lifetimePoints: number;
   currentTier: 'bronze' | 'silver' | 'gold' | 'platinum' | 'vip';
-  nextTier?: string;
+  nextTier?: string | null;
   pointsToNextTier: number;
   expiringPoints: number;
   expirationDate?: string;
@@ -443,7 +443,7 @@ export const customerEngagementCell = {
         };
 
         // Cache the profile
-        await redis.set(cacheKey, JSON.stringify(loyaltyProfile), 'EX', 1800); // 30 minutes
+        await redis.set(cacheKey, JSON.stringify(loyaltyProfile)); // 30 minutes
 
         return {
           success: true,
@@ -451,7 +451,10 @@ export const customerEngagementCell = {
           message: 'Loyalty profile retrieved successfully'
         };
       },
-      'Failed to retrieve loyalty profile'
+      {
+        success: false,
+        message: 'Failed to retrieve loyalty profile'
+      }
     );
   },
 
@@ -610,7 +613,10 @@ export const customerEngagementCell = {
           };
         });
       },
-      'Failed to update loyalty points'
+      {
+        success: false,
+        message: 'Failed to update loyalty points'
+      }
     );
   },
 
@@ -673,7 +679,11 @@ export const customerEngagementCell = {
           message: 'Loyalty reward created successfully'
         };
       },
-      'Failed to create loyalty reward'
+      {
+        success: false,
+        message: 'Failed to create loyalty reward',
+        error: 'Failed to create loyalty reward'
+      }
     );
   },
 
@@ -753,7 +763,7 @@ export const customerEngagementCell = {
             if (!validationResult.valid) {
               return {
                 success: false,
-                message: validationResult.message
+                message: validationResult.message || 'Reward conditions not met'
               };
             }
           }
@@ -824,7 +834,10 @@ export const customerEngagementCell = {
           };
         });
       },
-      'Failed to redeem reward'
+      {
+        success: false,
+        message: 'Failed to redeem reward'
+      }
     );
   },
 
@@ -878,7 +891,7 @@ export const customerEngagementCell = {
 
         // Analyze purchase patterns
         const totalPurchases = purchases.length;
-        const totalSpent = purchases.reduce((sum, p) => sum + p.total_amount, 0);
+        const totalSpent = purchases.reduce((sum: number, p: any) => sum + p.total_amount, 0);
         const averageOrderValue = totalSpent / totalPurchases;
 
         // Calculate purchase frequency (Nigerian market prefers monthly frequency)
@@ -907,7 +920,7 @@ export const customerEngagementCell = {
         }
 
         // Generate recommendations
-        let recommendations = [];
+        let recommendations: string[] = [];
         if (includeRecommendations) {
           recommendations = this.generateNigerianMarketRecommendations(
             purchases,
@@ -948,7 +961,10 @@ export const customerEngagementCell = {
           message: 'Purchase behavior analysis completed'
         };
       },
-      'Failed to analyze purchase behavior'
+      {
+        success: false,
+        message: 'Failed to analyze purchase behavior'
+      }
     );
   },
 
@@ -1082,6 +1098,50 @@ export const customerEngagementCell = {
   },
 
   /**
+   * Process time of day preferences
+   */
+  processTimePreferences(patterns: any[]): any[] {
+    const hourlyData = new Array(24).fill(0).map((_, i) => ({
+      hour: i,
+      transactionCount: 0
+    }));
+
+    patterns.forEach(pattern => {
+      const hour = pattern.hour;
+      if (hour >= 0 && hour < 24) {
+        hourlyData[hour].transactionCount += pattern.transaction_count || 0;
+      }
+    });
+
+    return hourlyData.filter(data => data.transactionCount > 0);
+  },
+
+  /**
+   * Process category preferences
+   */
+  processCategoryPreferences(patterns: any[]): any[] {
+    const categoryMap = new Map<string, { count: number; totalSpend: number; lastPurchase: string }>();
+    let totalTransactions = 0;
+
+    patterns.forEach(pattern => {
+      if (pattern.category) {
+        const existing = categoryMap.get(pattern.category) || { count: 0, totalSpend: 0, lastPurchase: '' };
+        existing.count += pattern.transaction_count || 0;
+        existing.totalSpend += (pattern.avg_spend || 0) * (pattern.transaction_count || 0);
+        existing.lastPurchase = pattern.created_at || new Date().toISOString();
+        categoryMap.set(pattern.category, existing);
+        totalTransactions += pattern.transaction_count || 0;
+      }
+    });
+
+    return Array.from(categoryMap.entries()).map(([category, data]) => ({
+      category,
+      percentage: totalTransactions > 0 ? (data.count / totalTransactions) * 100 : 0,
+      lastPurchase: data.lastPurchase
+    })).sort((a, b) => b.percentage - a.percentage);
+  },
+
+  /**
    * Calculate visit frequency (visits per month)
    */
   calculateVisitFrequency(totalTransactions: number): number {
@@ -1187,7 +1247,7 @@ export const customerEngagementCell = {
   /**
    * Validate reward conditions
    */
-  async validateRewardConditions(conditions: any, customerId: string, tenantId: string): Promise<{ valid: boolean; message?: string }> {
+  async validateRewardConditions(conditions: any, customerId: string, tenantId: string): Promise<{ valid: boolean; message: string }> {
     // Check minimum purchase amount
     if (conditions.minPurchaseAmount) {
       const recentPurchase = await execute_sql(
@@ -1236,7 +1296,7 @@ export const customerEngagementCell = {
       }
     }
 
-    return { valid: true };
+    return { valid: true, message: 'All conditions met' };
   },
 
   /**
@@ -1442,7 +1502,10 @@ export const customerEngagementCell = {
           message: 'Customer segments retrieved successfully'
         };
       },
-      'Failed to retrieve customer segments'
+      {
+        success: false,
+        message: 'Failed to retrieve customer segments'
+      }
     );
   },
 
@@ -1464,7 +1527,10 @@ export const customerEngagementCell = {
           message: 'Loyalty metrics calculated successfully'
         };
       },
-      'Failed to calculate loyalty metrics'
+      {
+        success: false,
+        message: 'Failed to calculate loyalty metrics'
+      }
     );
   },
 
@@ -1482,7 +1548,10 @@ export const customerEngagementCell = {
           message: 'Engagement campaign created successfully'
         };
       },
-      'Failed to create engagement campaign'
+      {
+        success: false,
+        message: 'Failed to create engagement campaign'
+      }
     );
   },
 
@@ -1498,7 +1567,10 @@ export const customerEngagementCell = {
           message: 'Engagement tracked successfully'
         };
       },
-      'Failed to track engagement'
+      {
+        success: false,
+        message: 'Failed to track engagement'
+      }
     );
   },
 
@@ -1515,7 +1587,10 @@ export const customerEngagementCell = {
           message: 'Engagement data exported successfully'
         };
       },
-      'Failed to export engagement data'
+      {
+        success: false,
+        message: 'Failed to export engagement data'
+      }
     );
   },
 
@@ -1532,7 +1607,10 @@ export const customerEngagementCell = {
           message: 'Tier progression managed successfully'
         };
       },
-      'Failed to manage tier progression'
+      {
+        success: false,
+        message: 'Failed to manage tier progression'
+      }
     );
   },
 
@@ -1549,7 +1627,10 @@ export const customerEngagementCell = {
           message: 'Cashback calculated successfully'
         };
       },
-      'Failed to calculate cashback'
+      {
+        success: false,
+        message: 'Failed to calculate cashback'
+      }
     );
   },
 
@@ -1566,7 +1647,10 @@ export const customerEngagementCell = {
           message: 'Retention campaigns scheduled successfully'
         };
       },
-      'Failed to schedule retention campaigns'
+      {
+        success: false,
+        message: 'Failed to schedule retention campaigns'
+      }
     );
   },
 
@@ -1582,7 +1666,10 @@ export const customerEngagementCell = {
           message: 'Loyalty profile updated successfully'
         };
       },
-      'Failed to update loyalty profile'
+      {
+        success: false,
+        message: 'Failed to update loyalty profile'
+      }
     );
   },
 
@@ -1598,7 +1685,10 @@ export const customerEngagementCell = {
           message: 'Engagement campaign updated successfully'
         };
       },
-      'Failed to update engagement campaign'
+      {
+        success: false,
+        message: 'Failed to update engagement campaign'
+      }
     );
   },
 
@@ -1614,7 +1704,10 @@ export const customerEngagementCell = {
           message: 'Loyalty reward updated successfully'
         };
       },
-      'Failed to update loyalty reward'
+      {
+        success: false,
+        message: 'Failed to update loyalty reward'
+      }
     );
   },
 
@@ -1630,7 +1723,10 @@ export const customerEngagementCell = {
           message: 'Engagement campaign deactivated successfully'
         };
       },
-      'Failed to deactivate engagement campaign'
+      {
+        success: false,
+        message: 'Failed to deactivate engagement campaign'
+      }
     );
   },
 
@@ -1646,7 +1742,10 @@ export const customerEngagementCell = {
           message: 'Loyalty reward deactivated successfully'
         };
       },
-      'Failed to deactivate loyalty reward'
+      {
+        success: false,
+        message: 'Failed to deactivate loyalty reward'
+      }
     );
   },
 
@@ -1663,7 +1762,10 @@ export const customerEngagementCell = {
           message: 'Loyalty points expired successfully'
         };
       },
-      'Failed to expire loyalty points'
+      {
+        success: false,
+        message: 'Failed to expire loyalty points'
+      }
     );
   },
 
