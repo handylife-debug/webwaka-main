@@ -1,0 +1,168 @@
+{
+  "id": "admin/TenantConfiguration",
+  "name": "TenantConfiguration",
+  "sector": "admin", 
+  "version": "1.0.0",
+  "description": "Comprehensive tenant configuration management including settings, subscription plans, branding, integrations, and feature customization",
+  "channels": ["stable", "canary"],
+  "inputs": {
+    "renderConfigurationPanel": {
+      "type": "object",
+      "properties": {
+        "tenantId": { "type": "string" },
+        "currentConfig": {
+          "type": "object",
+          "properties": {
+            "businessSettings": { "type": "object" },
+            "subscriptionPlan": { "type": "string" },
+            "features": { "type": "object" },
+            "branding": { "type": "object" },
+            "integrations": { "type": "object" },
+            "notifications": { "type": "object" }
+          }
+        },
+        "availablePlans": { "type": "array" },
+        "availableFeatures": { "type": "array" },
+        "availableIntegrations": { "type": "array" }
+      },
+      "required": ["tenantId"]
+    },
+    "updateTenantConfiguration": {
+      "type": "object", 
+      "properties": {
+        "tenantId": { "type": "string" },
+        "configSection": { "type": "string" },
+        "updates": { "type": "object" }
+      },
+      "required": ["tenantId", "configSection", "updates"]
+    },
+    "changeTenantPlan": {
+      "type": "object",
+      "properties": {
+        "tenantId": { "type": "string" },
+        "newPlan": { "type": "string" },
+        "billingCycle": { "type": "string" },
+        "effectiveDate": { "type": "string" }
+      },
+      "required": ["tenantId", "newPlan"]
+    },
+    "configureTenantFeatures": {
+      "type": "object",
+      "properties": {
+        "tenantId": { "type": "string" },
+        "featureUpdates": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "object",
+            "properties": {
+              "enabled": { "type": "boolean" },
+              "config": { "type": "object" }
+            }
+          }
+        }
+      },
+      "required": ["tenantId", "featureUpdates"]
+    },
+    "updateTenantBranding": {
+      "type": "object",
+      "properties": {
+        "tenantId": { "type": "string" },
+        "branding": {
+          "type": "object",
+          "properties": {
+            "emoji": { "type": "string" },
+            "primaryColor": { "type": "string" },
+            "secondaryColor": { "type": "string" },
+            "logo": { "type": "string" },
+            "favicon": { "type": "string" },
+            "customCss": { "type": "string" }
+          }
+        }
+      },
+      "required": ["tenantId", "branding"]
+    },
+    "configureIntegrations": {
+      "type": "object",
+      "properties": {
+        "tenantId": { "type": "string" },
+        "integrations": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "object",
+            "properties": {
+              "enabled": { "type": "boolean" },
+              "config": { "type": "object" },
+              "credentials": { "type": "object" }
+            }
+          }
+        }
+      },
+      "required": ["tenantId", "integrations"]
+    }
+  },
+  "outputs": {
+    "renderConfigurationPanel": {
+      "type": "object",
+      "properties": {
+        "component": { "type": "string" },
+        "currentConfig": { "type": "object" },
+        "availableOptions": { "type": "object" }
+      }
+    },
+    "updateTenantConfiguration": {
+      "type": "object",
+      "properties": {
+        "success": { "type": "boolean" },
+        "message": { "type": "string" },
+        "updatedConfig": { "type": "object" }
+      }
+    },
+    "changeTenantPlan": {
+      "type": "object",
+      "properties": {
+        "success": { "type": "boolean" },
+        "message": { "type": "string" },
+        "newPlan": { "type": "object" },
+        "billingImpact": { "type": "object" }
+      }
+    },
+    "configureTenantFeatures": {
+      "type": "object",
+      "properties": {
+        "success": { "type": "boolean" },
+        "message": { "type": "string" },
+        "updatedFeatures": { "type": "object" }
+      }
+    },
+    "updateTenantBranding": {
+      "type": "object",
+      "properties": {
+        "success": { "type": "boolean" },
+        "message": { "type": "string" },
+        "previewUrl": { "type": "string" }
+      }
+    },
+    "configureIntegrations": {
+      "type": "object",
+      "properties": {
+        "success": { "type": "boolean" },
+        "message": { "type": "string" },
+        "integrationStatus": { "type": "object" }
+      }
+    }
+  },
+  "actions": [
+    "renderConfigurationPanel",
+    "updateTenantConfiguration", 
+    "changeTenantPlan",
+    "configureTenantFeatures",
+    "updateTenantBranding",
+    "configureIntegrations",
+    "resetTenantConfiguration",
+    "exportTenantConfiguration",
+    "validateConfiguration"
+  ],
+  "dependencies": [],
+  "created": "2025-09-16T00:00:00Z",
+  "updated": "2025-09-16T00:00:00Z"
+}
