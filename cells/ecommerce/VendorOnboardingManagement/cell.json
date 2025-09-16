@@ -1,0 +1,226 @@
+{
+  "id": "ecom_201_1_vendor_onboarding_management", 
+  "name": "VendorOnboardingManagement",
+  "sector": "ecommerce",
+  "version": "1.0.0",
+  "description": "Multi-vendor onboarding cell with vendor approval workflow, tier management, and commission setup. Reuses existing partner management system for cellular efficiency.",
+  "channels": ["stable", "canary"],
+  "category": "ECOM-201.1",
+  "dependencies": ["CC-001.1", "admin/UserDetails", "RoleBasedPermissions"],
+  "cellularArchitecture": {
+    "reusesExistingCells": ["partner-management", "user-details"],
+    "cellularPrinciple": "atomic_reusable_functional_unit",
+    "dataLayer": "redis_cache_with_secure_database_storage"
+  },
+  "inputs": {
+    "createVendorApplication": {
+      "type": "object",
+      "properties": {
+        "email": { "type": "string", "format": "email" },
+        "first_name": { "type": "string" },
+        "last_name": { "type": "string" },
+        "phone": { "type": "string" },
+        "businessName": { "type": "string" },
+        "company_website": { "type": "string" },
+        "businessType": { 
+          "type": "string", 
+          "enum": ["individual", "company", "partnership", "cooperative"] 
+        },
+        "businessAddress": { "type": "string" },
+        "businessRegistrationNumber": { "type": "string" },
+        "taxId": { "type": "string" },
+        "bankDetails": {
+          "type": "object",
+          "properties": {
+            "bankName": { "type": "string" },
+            "accountNumber": { "type": "string" },
+            "accountName": { "type": "string" },
+            "routingNumber": { "type": "string" }
+          }
+        },
+        "documents": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "type": { "type": "string" },
+              "url": { "type": "string" },
+              "verified": { "type": "boolean" }
+            }
+          }
+        },
+        "experience_level": { "type": "string" },
+        "marketing_experience": { "type": "string" },
+        "why_partner": { "type": "string" },
+        "referral_methods": { "type": "string" },
+        "sponsor_email": { "type": "string" },
+        "requested_partner_level_id": { "type": "string" }
+      },
+      "required": ["email", "first_name", "last_name", "businessName", "businessType", "businessAddress"]
+    },
+    "reviewApplication": {
+      "type": "object",
+      "properties": {
+        "applicationId": { "type": "string" },
+        "reviewData": {
+          "type": "object", 
+          "properties": {
+            "status": { "type": "string", "enum": ["approved", "rejected"] },
+            "reviewNotes": { "type": "string" },
+            "assignedTier": { "type": "string" },
+            "commissionRate": { "type": "number" },
+            "reviewerId": { "type": "string" }
+          },
+          "required": ["status", "reviewerId"]
+        }
+      },
+      "required": ["applicationId", "reviewData"]
+    },
+    "getApplications": {
+      "type": "object",
+      "properties": {
+        "filters": {
+          "type": "object",
+          "properties": {
+            "status": { "type": "string", "enum": ["pending", "approved", "rejected"] },
+            "businessType": { "type": "string" }
+          }
+        },
+        "pagination": {
+          "type": "object",
+          "properties": {
+            "page": { "type": "number" },
+            "limit": { "type": "number" }
+          }
+        }
+      }
+    },
+    "manageTiers": {
+      "type": "object",
+      "properties": {
+        "action": { "type": "string", "enum": ["create", "update", "delete", "list"] },
+        "tierData": {
+          "type": "object",
+          "properties": {
+            "id": { "type": "string" },
+            "name": { "type": "string" },
+            "level_code": { "type": "string" },
+            "description": { "type": "string" },
+            "default_commission_rate": { "type": "number" },
+            "min_commission_rate": { "type": "number" },
+            "max_commission_rate": { "type": "number" },
+            "benefits": { "type": "array", "items": { "type": "string" } },
+            "requirements": { "type": "array", "items": { "type": "string" } },
+            "level_order": { "type": "number" },
+            "max_referral_depth": { "type": "number" },
+            "createdBy": { "type": "string" }
+          }
+        }
+      },
+      "required": ["action"]
+    },
+    "updateCommissionStructure": {
+      "type": "object",
+      "properties": {
+        "tierId": { "type": "string" },
+        "commissionData": {
+          "type": "object",
+          "properties": {
+            "default_commission_rate": { "type": "number" },
+            "min_commission_rate": { "type": "number" },
+            "max_commission_rate": { "type": "number" },
+            "benefits": { "type": "array", "items": { "type": "string" } },
+            "requirements": { "type": "array", "items": { "type": "string" } }
+          }
+        }
+      },
+      "required": ["tierId", "commissionData"]
+    },
+    "getVendorMetrics": {
+      "type": "object",
+      "properties": {
+        "vendorId": { "type": "string" },
+        "dateRange": {
+          "type": "object",
+          "properties": {
+            "startDate": { "type": "string" },
+            "endDate": { "type": "string" }
+          }
+        }
+      }
+    }
+  },
+  "outputs": {
+    "createVendorApplication": {
+      "type": "object",
+      "properties": {
+        "success": { "type": "boolean" },
+        "applicationId": { "type": "string" },
+        "message": { "type": "string" }
+      }
+    },
+    "reviewApplication": {
+      "type": "object",
+      "properties": {
+        "success": { "type": "boolean" },
+        "vendorId": { "type": "string" },
+        "message": { "type": "string" }
+      }
+    },
+    "getApplications": {
+      "type": "object",
+      "properties": {
+        "applications": { "type": "array" },
+        "total": { "type": "number" },
+        "pagination": { "type": "object" }
+      }
+    },
+    "manageTiers": {
+      "type": "object",
+      "properties": {
+        "success": { "type": "boolean" },
+        "tierId": { "type": "string" },
+        "tiers": { "type": "array" },
+        "message": { "type": "string" }
+      }
+    },
+    "updateCommissionStructure": {
+      "type": "object",
+      "properties": {
+        "success": { "type": "boolean" },
+        "message": { "type": "string" }
+      }
+    },
+    "getVendorMetrics": {
+      "type": "object",
+      "properties": {
+        "success": { "type": "boolean" },
+        "metrics": { "type": "object" },
+        "message": { "type": "string" }
+      }
+    }
+  },
+  "actions": [
+    "createVendorApplication",
+    "reviewApplication", 
+    "getApplications",
+    "manageTiers",
+    "updateCommissionStructure",
+    "getVendorMetrics"
+  ],
+  "security": {
+    "dataClassification": "confidential",
+    "encryptionRequired": true,
+    "auditTrail": true,
+    "sensitiveFields": ["taxId", "bankDetails", "businessRegistrationNumber"],
+    "storagePolicy": "encrypted_database_with_redis_cache"
+  },
+  "compliance": {
+    "gdpr": true,
+    "pci": true,
+    "dataRetention": "7_years",
+    "rightToErasure": true
+  },
+  "created": "2025-01-16T00:00:00Z",
+  "updated": "2025-01-16T00:00:00Z"
+}
