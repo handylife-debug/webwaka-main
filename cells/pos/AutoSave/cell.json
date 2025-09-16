@@ -1,0 +1,29 @@
+{
+  "name": "AutoSave",
+  "version": "1.0.0",
+  "description": "Automatic transaction backup to prevent data loss during interruptions",
+  "dependencies": ["CC-003.1"],
+  "category": "pos",
+  "type": "component",
+  "tags": ["auto-save", "backup", "transaction", "reliability"],
+  "author": "WebWaka Team",
+  "exports": {
+    "client": "./src/client.tsx",
+    "server": "./src/server.ts"
+  },
+  "props": {
+    "tenantId": "string",
+    "currentTransaction": "any",
+    "className": "string",
+    "onRestoreTransaction": "function",
+    "onTransactionSaved": "function", 
+    "onAutoSaveStatusChange": "function"
+  },
+  "features": [
+    "Automatic transaction backup",
+    "Configurable save intervals",
+    "Transaction recovery",
+    "Progress tracking",
+    "Offline functionality"
+  ]
+}
