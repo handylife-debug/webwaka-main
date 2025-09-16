@@ -1,0 +1,535 @@
+{
+  "id": "inventory/InventoryTracking",
+  "name": "InventoryTracking",
+  "sector": "inventory",
+  "version": "1.1.0",
+  "description": "Enterprise inventory tracking with advanced serial/lot tracking, multi-location support, real-time stock management, automated reordering, and offline-first design for Nigerian businesses",
+  "channels": ["stable", "canary"],
+  "inputs": {
+    "updateStockLevel": {
+      "type": "object",
+      "properties": {
+        "productId": { "type": "string", "format": "uuid" },
+        "variantId": { "type": "string", "format": "uuid" },
+        "locationId": { "type": "string", "format": "uuid" },
+        "quantity": { "type": "integer" },
+        "movement_type": { "type": "string", "enum": ["in", "out", "adjustment", "transfer", "return", "loss"] },
+        "movement_reason": { "type": "string", "enum": ["sale", "purchase", "adjustment", "transfer", "return", "damaged", "expired", "theft", "recount"] },
+        "reference_type": { "type": "string", "enum": ["sale", "purchase_order", "adjustment", "transfer", "audit"] },
+        "reference_id": { "type": "string" },
+        "cost_per_unit": { "type": "number", "minimum": 0 },
+        "notes": { "type": "string" },
+        "batch_number": { "type": "string" },
+        "expiry_date": { "type": "string", "format": "date" },
+        "performed_by": { "type": "string", "format": "uuid" }
+      },
+      "required": ["productId", "locationId", "quantity", "movement_type", "movement_reason"]
+    },
+    "getStockLevels": {
+      "type": "object",
+      "properties": {
+        "locationId": { "type": "string", "format": "uuid" },
+        "productId": { "type": "string", "format": "uuid" },
+        "categoryId": { "type": "string", "format": "uuid" },
+        "includeReserved": { "type": "boolean", "default": true },
+        "lowStockOnly": { "type": "boolean", "default": false },
+        "limit": { "type": "integer", "minimum": 1, "maximum": 500, "default": 100 },
+        "offset": { "type": "integer", "minimum": 0, "default": 0 }
+      }
+    },
+    "transferStock": {
+      "type": "object",
+      "properties": {
+        "productId": { "type": "string", "format": "uuid" },
+        "variantId": { "type": "string", "format": "uuid" },
+        "fromLocationId": { "type": "string", "format": "uuid" },
+        "toLocationId": { "type": "string", "format": "uuid" },
+        "quantity": { "type": "integer", "minimum": 1 },
+        "transferReason": { "type": "string", "enum": ["restock", "rebalance", "customer_request", "expired", "damaged", "seasonal"] },
+        "expectedArrival": { "type": "string", "format": "date" },
+        "notes": { "type": "string" },
+        "requestedBy": { "type": "string", "format": "uuid" },
+        "priority": { "type": "string", "enum": ["low", "medium", "high", "urgent"], "default": "medium" }
+      },
+      "required": ["productId", "fromLocationId", "toLocationId", "quantity", "transferReason"]
+    },
+    "stockAdjustment": {
+      "type": "object",
+      "properties": {
+        "productId": { "type": "string", "format": "uuid" },
+        "variantId": { "type": "string", "format": "uuid" },
+        "locationId": { "type": "string", "format": "uuid" },
+        "currentStock": { "type": "integer", "minimum": 0 },
+        "adjustedStock": { "type": "integer", "minimum": 0 },
+        "adjustmentReason": { "type": "string", "enum": ["count_correction", "damaged", "expired", "theft", "found", "system_error", "audit"] },
+        "notes": { "type": "string" },
+        "evidence": { "type": "string" },
+        "performedBy": { "type": "string", "format": "uuid" },
+        "approvedBy": { "type": "string", "format": "uuid" }
+      },
+      "required": ["productId", "locationId", "currentStock", "adjustedStock", "adjustmentReason", "performedBy"]
+    },
+    "stockAudit": {
+      "type": "object",
+      "properties": {
+        "locationId": { "type": "string", "format": "uuid" },
+        "auditType": { "type": "string", "enum": ["full", "cycle", "spot", "category"], "default": "cycle" },
+        "categoryId": { "type": "string", "format": "uuid" },
+        "plannedDate": { "type": "string", "format": "date" },
+        "auditReason": { "type": "string", "enum": ["scheduled", "discrepancy", "loss", "compliance", "period_end"] },
+        "assignedTo": { "type": "string", "format": "uuid" },
+        "priority": { "type": "string", "enum": ["low", "medium", "high", "urgent"], "default": "medium" },
+        "products": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "productId": { "type": "string", "format": "uuid" },
+              "variantId": { "type": "string", "format": "uuid" },
+              "expected_count": { "type": "integer", "minimum": 0 },
+              "actual_count": { "type": "integer", "minimum": 0 },
+              "notes": { "type": "string" }
+            },
+            "required": ["productId", "expected_count", "actual_count"]
+          }
+        }
+      },
+      "required": ["locationId", "auditType", "plannedDate", "auditReason", "assignedTo"]
+    },
+    "reserveStock": {
+      "type": "object",
+      "properties": {
+        "productId": { "type": "string", "format": "uuid" },
+        "variantId": { "type": "string", "format": "uuid" },
+        "locationId": { "type": "string", "format": "uuid" },
+        "quantity": { "type": "integer", "minimum": 1 },
+        "reservationType": { "type": "string", "enum": ["sale", "transfer", "hold", "inspection", "return"] },
+        "referenceId": { "type": "string" },
+        "reservationExpiry": { "type": "string", "format": "date-time" },
+        "notes": { "type": "string" },
+        "reservedBy": { "type": "string", "format": "uuid" }
+      },
+      "required": ["productId", "locationId", "quantity", "reservationType", "reservedBy"]
+    },
+    "releaseReservation": {
+      "type": "object",
+      "properties": {
+        "reservationId": { "type": "string", "format": "uuid" },
+        "quantity": { "type": "integer", "minimum": 1 },
+        "releaseReason": { "type": "string", "enum": ["fulfilled", "cancelled", "expired", "partial"] },
+        "notes": { "type": "string" },
+        "releasedBy": { "type": "string", "format": "uuid" }
+      },
+      "required": ["reservationId", "releaseReason", "releasedBy"]
+    },
+    "getLowStockAlerts": {
+      "type": "object",
+      "properties": {
+        "locationId": { "type": "string", "format": "uuid" },
+        "severity": { "type": "string", "enum": ["critical", "warning", "info"], "default": "warning" },
+        "categoryId": { "type": "string", "format": "uuid" },
+        "limit": { "type": "integer", "minimum": 1, "maximum": 100, "default": 50 }
+      }
+    },
+    "generateReorderSuggestions": {
+      "type": "object",
+      "properties": {
+        "locationId": { "type": "string", "format": "uuid" },
+        "categoryId": { "type": "string", "format": "uuid" },
+        "priority": { "type": "string", "enum": ["all", "critical", "urgent"], "default": "all" },
+        "includeSeasonalFactors": { "type": "boolean", "default": true },
+        "forecastDays": { "type": "integer", "minimum": 7, "maximum": 365, "default": 30 }
+      }
+    },
+    "stockMovementHistory": {
+      "type": "object",
+      "properties": {
+        "productId": { "type": "string", "format": "uuid" },
+        "variantId": { "type": "string", "format": "uuid" },
+        "locationId": { "type": "string", "format": "uuid" },
+        "startDate": { "type": "string", "format": "date" },
+        "endDate": { "type": "string", "format": "date" },
+        "movementTypes": {
+          "type": "array",
+          "items": { "type": "string", "enum": ["in", "out", "adjustment", "transfer"] }
+        },
+        "limit": { "type": "integer", "minimum": 1, "maximum": 1000, "default": 100 },
+        "offset": { "type": "integer", "minimum": 0, "default": 0 }
+      }
+    },
+    "inventoryValuation": {
+      "type": "object",
+      "properties": {
+        "locationId": { "type": "string", "format": "uuid" },
+        "categoryId": { "type": "string", "format": "uuid" },
+        "valuationMethod": { "type": "string", "enum": ["FIFO", "LIFO", "weighted_average", "current_cost"], "default": "weighted_average" },
+        "asOfDate": { "type": "string", "format": "date" },
+        "currency": { "type": "string", "enum": ["NGN", "USD", "GBP"], "default": "NGN" }
+      }
+    },
+    "syncOfflineChanges": {
+      "type": "object",
+      "properties": {
+        "changes": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": { "type": "string" },
+              "action": { "type": "string", "enum": ["stock_update", "transfer", "adjustment", "reservation"] },
+              "timestamp": { "type": "string", "format": "date-time" },
+              "data": { "type": "object" },
+              "syncStatus": { "type": "string", "enum": ["pending", "conflicted", "merged"], "default": "pending" }
+            },
+            "required": ["id", "action", "timestamp", "data"]
+          }
+        },
+        "clientVersion": { "type": "string" },
+        "lastSyncTimestamp": { "type": "string", "format": "date-time" }
+      },
+      "required": ["changes"]
+    },
+    "manageSerialNumbers": {
+      "type": "object",
+      "properties": {
+        "productId": { "type": "string", "format": "uuid" },
+        "variantId": { "type": "string", "format": "uuid" },
+        "locationId": { "type": "string", "format": "uuid" },
+        "serialNumbers": {
+          "type": "array",
+          "items": { "type": "string" },
+          "minItems": 1
+        },
+        "action": { 
+          "type": "string", 
+          "enum": ["create", "update", "transfer", "sell", "return", "damage"],
+          "default": "create"
+        },
+        "batchNumber": { "type": "string" },
+        "lotNumber": { "type": "string" },
+        "supplierInfo": { "type": "object" }
+      },
+      "required": ["productId", "locationId", "serialNumbers", "action"]
+    },
+    "getSerialNumberReport": {
+      "type": "object",
+      "properties": {
+        "productId": { "type": "string", "format": "uuid" },
+        "locationId": { "type": "string", "format": "uuid" },
+        "serialNumber": { "type": "string" },
+        "limit": { "type": "integer", "minimum": 1, "maximum": 1000, "default": 100 },
+        "offset": { "type": "integer", "minimum": 0, "default": 0 }
+      }
+    },
+    "getLotExpiryReport": {
+      "type": "object",
+      "properties": {
+        "locationId": { "type": "string", "format": "uuid" },
+        "productId": { "type": "string", "format": "uuid" },
+        "daysToExpiry": { "type": "integer", "minimum": 1, "maximum": 365, "default": 30 }
+      }
+    }
+  },
+  "outputs": {
+    "updateStockLevel": {
+      "type": "object",
+      "properties": {
+        "success": { "type": "boolean" },
+        "stockLevel": {
+          "type": "object",
+          "properties": {
+            "productId": { "type": "string" },
+            "variantId": { "type": "string" },
+            "locationId": { "type": "string" },
+            "currentStock": { "type": "integer" },
+            "reservedStock": { "type": "integer" },
+            "availableStock": { "type": "integer" },
+            "lastMovement": { "type": "string", "format": "date-time" }
+          }
+        },
+        "movement": {
+          "type": "object",
+          "properties": {
+            "id": { "type": "string" },
+            "movementType": { "type": "string" },
+            "quantity": { "type": "integer" },
+            "timestamp": { "type": "string", "format": "date-time" }
+          }
+        },
+        "alerts": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "type": { "type": "string", "enum": ["low_stock", "out_of_stock", "overstock", "reorder"] },
+              "severity": { "type": "string", "enum": ["info", "warning", "critical"] },
+              "message": { "type": "string" }
+            }
+          }
+        },
+        "message": { "type": "string" },
+        "error": { "type": "string" }
+      }
+    },
+    "getStockLevels": {
+      "type": "object",
+      "properties": {
+        "success": { "type": "boolean" },
+        "stockLevels": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "productId": { "type": "string" },
+              "productName": { "type": "string" },
+              "productCode": { "type": "string" },
+              "variantId": { "type": "string" },
+              "variantName": { "type": "string" },
+              "locationId": { "type": "string" },
+              "locationName": { "type": "string" },
+              "currentStock": { "type": "integer" },
+              "reservedStock": { "type": "integer" },
+              "availableStock": { "type": "integer" },
+              "costPerUnit": { "type": "number" },
+              "totalValue": { "type": "number" },
+              "reorderPoint": { "type": "integer" },
+              "maxStockLevel": { "type": "integer" },
+              "lastCounted": { "type": "string", "format": "date-time" },
+              "lastMovement": { "type": "string", "format": "date-time" },
+              "status": { "type": "string", "enum": ["in_stock", "low_stock", "out_of_stock", "overstock"] }
+            }
+          }
+        },
+        "pagination": {
+          "type": "object",
+          "properties": {
+            "total": { "type": "integer" },
+            "limit": { "type": "integer" },
+            "offset": { "type": "integer" },
+            "hasMore": { "type": "boolean" }
+          }
+        },
+        "summary": {
+          "type": "object",
+          "properties": {
+            "totalProducts": { "type": "integer" },
+            "totalValue": { "type": "number" },
+            "lowStockItems": { "type": "integer" },
+            "outOfStockItems": { "type": "integer" },
+            "overstockItems": { "type": "integer" }
+          }
+        },
+        "message": { "type": "string" },
+        "error": { "type": "string" }
+      }
+    },
+    "transferStock": {
+      "type": "object",
+      "properties": {
+        "success": { "type": "boolean" },
+        "transfer": {
+          "type": "object",
+          "properties": {
+            "id": { "type": "string" },
+            "transferNumber": { "type": "string" },
+            "productId": { "type": "string" },
+            "fromLocationId": { "type": "string" },
+            "toLocationId": { "type": "string" },
+            "quantity": { "type": "integer" },
+            "status": { "type": "string", "enum": ["pending", "in_transit", "completed", "cancelled"] },
+            "requestedDate": { "type": "string", "format": "date-time" },
+            "expectedArrival": { "type": "string", "format": "date" },
+            "actualArrival": { "type": "string", "format": "date-time" }
+          }
+        },
+        "stockImpact": {
+          "type": "object",
+          "properties": {
+            "sourceLocation": {
+              "type": "object",
+              "properties": {
+                "previousStock": { "type": "integer" },
+                "currentStock": { "type": "integer" },
+                "reservedStock": { "type": "integer" }
+              }
+            },
+            "destinationLocation": {
+              "type": "object",
+              "properties": {
+                "previousStock": { "type": "integer" },
+                "expectedStock": { "type": "integer" }
+              }
+            }
+          }
+        },
+        "message": { "type": "string" },
+        "error": { "type": "string" }
+      }
+    },
+    "generateReorderSuggestions": {
+      "type": "object",
+      "properties": {
+        "success": { "type": "boolean" },
+        "suggestions": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "productId": { "type": "string" },
+              "productName": { "type": "string" },
+              "variantId": { "type": "string" },
+              "variantName": { "type": "string" },
+              "locationId": { "type": "string" },
+              "locationName": { "type": "string" },
+              "currentStock": { "type": "integer" },
+              "reorderPoint": { "type": "integer" },
+              "suggestedQuantity": { "type": "integer" },
+              "priority": { "type": "string", "enum": ["low", "medium", "high", "critical"] },
+              "daysUntilStockout": { "type": "integer" },
+              "averageDailySales": { "type": "number" },
+              "leadTimeDays": { "type": "integer" },
+              "seasonalFactor": { "type": "number" },
+              "supplierInfo": {
+                "type": "object",
+                "properties": {
+                  "supplierId": { "type": "string" },
+                  "supplierName": { "type": "string" },
+                  "lastOrderDate": { "type": "string", "format": "date" },
+                  "minimumOrderQuantity": { "type": "integer" },
+                  "unitCost": { "type": "number" }
+                }
+              },
+              "estimatedCost": { "type": "number" },
+              "currency": { "type": "string" }
+            }
+          }
+        },
+        "summary": {
+          "type": "object",
+          "properties": {
+            "totalSuggestions": { "type": "integer" },
+            "criticalItems": { "type": "integer" },
+            "totalEstimatedCost": { "type": "number" },
+            "currency": { "type": "string" }
+          }
+        },
+        "message": { "type": "string" },
+        "error": { "type": "string" }
+      }
+    },
+    "inventoryValuation": {
+      "type": "object",
+      "properties": {
+        "success": { "type": "boolean" },
+        "valuation": {
+          "type": "object",
+          "properties": {
+            "totalValue": { "type": "number" },
+            "currency": { "type": "string" },
+            "valuationMethod": { "type": "string" },
+            "asOfDate": { "type": "string", "format": "date" },
+            "breakdown": {
+              "type": "object",
+              "properties": {
+                "byCategory": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "categoryId": { "type": "string" },
+                      "categoryName": { "type": "string" },
+                      "totalQuantity": { "type": "integer" },
+                      "totalValue": { "type": "number" },
+                      "percentage": { "type": "number" }
+                    }
+                  }
+                },
+                "byLocation": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "locationId": { "type": "string" },
+                      "locationName": { "type": "string" },
+                      "totalQuantity": { "type": "integer" },
+                      "totalValue": { "type": "number" },
+                      "percentage": { "type": "number" }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "message": { "type": "string" },
+        "error": { "type": "string" }
+      }
+    },
+    "syncOfflineChanges": {
+      "type": "object",
+      "properties": {
+        "success": { "type": "boolean" },
+        "syncResults": {
+          "type": "object",
+          "properties": {
+            "processed": { "type": "integer" },
+            "successful": { "type": "integer" },
+            "failed": { "type": "integer" },
+            "conflicts": { "type": "integer" }
+          }
+        },
+        "conflicts": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "changeId": { "type": "string" },
+              "conflictType": { "type": "string", "enum": ["concurrent_modification", "data_inconsistency", "business_rule_violation"] },
+              "serverData": { "type": "object" },
+              "clientData": { "type": "object" },
+              "suggestedResolution": { "type": "string" }
+            }
+          }
+        },
+        "serverTimestamp": { "type": "string", "format": "date-time" },
+        "message": { "type": "string" },
+        "error": { "type": "string" }
+      }
+    }
+  },
+  "actions": [
+    "updateStockLevel",
+    "getStockLevels", 
+    "transferStock",
+    "stockAdjustment",
+    "stockAudit",
+    "reserveStock",
+    "releaseReservation",
+    "getLowStockAlerts",
+    "generateReorderSuggestions",
+    "stockMovementHistory",
+    "inventoryValuation",
+    "manageSerialNumbers",
+    "getSerialNumberReport",
+    "getLotExpiryReport",
+    "bulkStockUpdate",
+    "consolidateStock",
+    "cycleCounting",
+    "stockAgeing",
+    "deadStockAnalysis",
+    "turnoverAnalysis",
+    "forecastDemand",
+    "optimizeReorderPoints",
+    "syncOfflineChanges",
+    "resolveConflicts",
+    "getInventoryReport",
+    "exportInventoryData",
+    "importInventoryData",
+    "realTimeStockCheck",
+    "autoReorderExecute",
+    "locationStockBalance"
+  ],
+  "dependencies": ["inventory/ProductCatalog"],
+  "created": "2025-09-15T00:00:00Z",
+  "updated": "2025-09-15T00:00:00Z"
+}
