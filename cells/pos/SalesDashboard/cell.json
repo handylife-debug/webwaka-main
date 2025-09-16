@@ -1,0 +1,27 @@
+{
+  "name": "SalesDashboard",
+  "version": "1.0.0",
+  "description": "Real-time sales analytics and business insights",
+  "dependencies": ["CC-004.1", "CC-005.1"],
+  "category": "pos",
+  "type": "component", 
+  "tags": ["dashboard", "analytics", "sales", "metrics", "reporting"],
+  "author": "WebWaka Team",
+  "exports": {
+    "client": "./src/client.tsx",
+    "server": "./src/server.ts"
+  },
+  "props": {
+    "tenantId": "string",
+    "className": "string",
+    "onMetricClick": "function",
+    "refreshInterval": "number"
+  },
+  "features": [
+    "Real-time sales metrics",
+    "Product performance tracking",
+    "Customer insights",
+    "Configurable time ranges",
+    "Data export capabilities"
+  ]
+}
