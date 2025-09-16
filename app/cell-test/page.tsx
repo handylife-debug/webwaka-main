@@ -2,6 +2,7 @@
 
 import React from 'react';
 import { Cell } from '../../cell-sdk/components/Cell';
+import { DarkModeCell } from '../../cells/ui/DarkModeCell';
 
 export default function CellTestPage() {
   return (
@@ -34,6 +35,18 @@ export default function CellTestPage() {
           />
         </div>
         
+        {/* Dark Mode Cell Test */}
+        <div className="border rounded-lg p-4 bg-gray-50 mt-6">
+          <h2 className="text-lg font-semibold mb-4">Dark Mode Cell Test</h2>
+          <div className="max-w-2xl">
+            <DarkModeCell 
+              tenantId="test-tenant-123"
+              className="w-full"
+              showAdvanced={true}
+            />
+          </div>
+        </div>
+
         <div className="mt-6 p-4 bg-blue-50 rounded-lg">
           <h3 className="text-md font-semibold text-blue-900 mb-2">Implementation Status</h3>
           <ul className="space-y-1 text-sm text-blue-800">
@@ -43,6 +56,7 @@ export default function CellTestPage() {
             <li>✅ CircuitBreaker Implemented: Proper error handling and resilience</li>
             <li>✅ Registry Mock Implementation: Development-ready artifact storage</li>
             <li>✅ Security Features Configured: Disabled in development, enabled in production</li>
+            <li>✅ Dark Mode Cell Fixed: Self-contained with ThemeProvider integration</li>
           </ul>
         </div>
       </div>
