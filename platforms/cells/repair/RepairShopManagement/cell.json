@@ -1,0 +1,259 @@
+{
+  "id": "repair/RepairShopManagement", 
+  "name": "RepairShopManagement",
+  "sector": "repair",
+  "version": "1.0.0",
+  "description": "Comprehensive repair shop management for Nigerian electronics and device repair businesses with customer tracking, device registration, repair workflow, parts inventory, and billing integration",
+  "channels": ["stable", "canary"],
+  "inputs": {
+    "createRepairJob": {
+      "type": "object",
+      "properties": {
+        "customerId": { "type": "string", "format": "uuid" },
+        "deviceInfo": {
+          "type": "object",
+          "properties": {
+            "deviceType": { "type": "string", "enum": ["smartphone", "laptop", "tablet", "desktop", "smartwatch", "headphones", "camera", "gaming_console", "tv", "other"] },
+            "brand": { "type": "string", "maxLength": 100 },
+            "model": { "type": "string", "maxLength": 100 },
+            "serialNumber": { "type": "string", "maxLength": 100 },
+            "imei": { "type": "string", "maxLength": 20 },
+            "color": { "type": "string", "maxLength": 50 },
+            "condition": { "type": "string", "enum": ["excellent", "good", "fair", "poor", "damaged"] },
+            "accessories": { "type": "array", "items": { "type": "string" } },
+            "purchaseDate": { "type": "string", "format": "date" },
+            "warrantyStatus": { "type": "string", "enum": ["in_warranty", "expired", "unknown", "voided"] }
+          },
+          "required": ["deviceType", "brand", "model", "condition"]
+        },
+        "problemDescription": { "type": "string", "maxLength": 1000 },
+        "symptoms": { "type": "array", "items": { "type": "string" } },
+        "customerReportedIssues": { "type": "array", "items": { "type": "string" } },
+        "estimatedCompletionDate": { "type": "string", "format": "date" },
+        "priority": { "type": "string", "enum": ["low", "medium", "high", "urgent"], "default": "medium" },
+        "serviceType": { "type": "string", "enum": ["diagnosis", "repair", "maintenance", "upgrade", "data_recovery", "warranty_claim"] },
+        "diagnosticFee": { "type": "number", "minimum": 0 },
+        "depositRequired": { "type": "number", "minimum": 0 },
+        "assignedTechnician": { "type": "string", "format": "uuid" },
+        "locationId": { "type": "string", "format": "uuid" },
+        "notes": { "type": "string", "maxLength": 500 },
+        "idempotencyKey": { "type": "string", "maxLength": 255, "description": "Optional key to ensure idempotent job creation and prevent duplicates on retries" }
+      },
+      "required": ["customerId", "deviceInfo", "problemDescription", "serviceType", "assignedTechnician", "locationId"]
+    },
+    "updateRepairStatus": {
+      "type": "object", 
+      "properties": {
+        "repairJobId": { "type": "string", "format": "uuid" },
+        "status": { "type": "string", "enum": ["pending_diagnosis", "diagnosed", "parts_ordered", "in_repair", "testing", "completed", "ready_for_pickup", "delivered", "cancelled", "on_hold"] },
+        "statusNotes": { "type": "string", "maxLength": 500 },
+        "technicianNotes": { "type": "string", "maxLength": 1000 },
+        "updatedBy": { "type": "string", "format": "uuid" },
+        "estimatedCompletion": { "type": "string", "format": "date-time" },
+        "notifyCustomer": { "type": "boolean", "default": true },
+        "notificationMethod": { "type": "string", "enum": ["sms", "email", "call"], "default": "sms" }
+      },
+      "required": ["repairJobId", "status", "updatedBy"]
+    },
+    "addRepairParts": {
+      "type": "object",
+      "properties": {
+        "repairJobId": { "type": "string", "format": "uuid" },
+        "parts": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "productId": { "type": "string", "format": "uuid" },
+              "quantity": { "type": "integer", "minimum": 1 },
+              "unitPrice": { "type": "number", "minimum": 0 },
+              "partType": { "type": "string", "enum": ["oem", "aftermarket", "refurbished", "used"] },
+              "warrantyPeriod": { "type": "integer", "minimum": 0 },
+              "serialNumber": { "type": "string" },
+              "supplierInfo": { "type": "string" },
+              "notes": { "type": "string" }
+            },
+            "required": ["productId", "quantity", "unitPrice", "partType"]
+          }
+        },
+        "updatedBy": { "type": "string", "format": "uuid" }
+      },
+      "required": ["repairJobId", "parts", "updatedBy"]
+    },
+    "createRepairEstimate": {
+      "type": "object",
+      "properties": {
+        "repairJobId": { "type": "string", "format": "uuid" },
+        "estimate": {
+          "type": "object",
+          "properties": {
+            "diagnosticFee": { "type": "number", "minimum": 0 },
+            "laborCost": { "type": "number", "minimum": 0 },
+            "partsCost": { "type": "number", "minimum": 0 },
+            "additionalFees": { "type": "number", "minimum": 0 },
+            "discountAmount": { "type": "number", "minimum": 0 },
+            "totalEstimate": { "type": "number", "minimum": 0 },
+            "currency": { "type": "string", "enum": ["NGN", "USD", "GBP"], "default": "NGN" },
+            "validUntil": { "type": "string", "format": "date" },
+            "paymentTerms": { "type": "string", "enum": ["full_upfront", "deposit_50", "deposit_30", "completion"] },
+            "warrantyPeriod": { "type": "integer", "minimum": 0 },
+            "notes": { "type": "string" }
+          },
+          "required": ["laborCost", "partsCost", "totalEstimate"]
+        },
+        "createdBy": { "type": "string", "format": "uuid" }
+      },
+      "required": ["repairJobId", "estimate", "createdBy"]
+    },
+    "processRepairPayment": {
+      "type": "object",
+      "properties": {
+        "repairJobId": { "type": "string", "format": "uuid" },
+        "paymentType": { "type": "string", "enum": ["diagnostic_fee", "deposit", "parts_payment", "final_payment", "additional_charges"] },
+        "amount": { "type": "number", "minimum": 0 },
+        "currency": { "type": "string", "enum": ["NGN", "USD", "GBP"], "default": "NGN" },
+        "paymentMethod": { "type": "string", "enum": ["cash", "card", "transfer", "mobile_money", "paystack", "flutterwave"] },
+        "splitPayment": {
+          "type": "object",
+          "properties": {
+            "enabled": { "type": "boolean", "default": false },
+            "parties": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "partyType": { "type": "string", "enum": ["customer", "insurance", "warranty", "corporate"] },
+                  "percentage": { "type": "number", "minimum": 0, "maximum": 100 },
+                  "amount": { "type": "number", "minimum": 0 },
+                  "reference": { "type": "string" }
+                }
+              }
+            }
+          }
+        },
+        "processedBy": { "type": "string", "format": "uuid" }
+      },
+      "required": ["repairJobId", "paymentType", "amount", "paymentMethod", "processedBy"]
+    },
+    "getRepairHistory": {
+      "type": "object",
+      "properties": {
+        "customerId": { "type": "string", "format": "uuid" },
+        "deviceSerialNumber": { "type": "string" },
+        "dateFrom": { "type": "string", "format": "date" },
+        "dateTo": { "type": "string", "format": "date" },
+        "status": { "type": "string", "enum": ["pending_diagnosis", "diagnosed", "parts_ordered", "in_repair", "testing", "completed", "ready_for_pickup", "delivered", "cancelled", "on_hold"] },
+        "technicianId": { "type": "string", "format": "uuid" },
+        "serviceType": { "type": "string", "enum": ["diagnosis", "repair", "maintenance", "upgrade", "data_recovery", "warranty_claim"] },
+        "limit": { "type": "integer", "minimum": 1, "maximum": 100, "default": 50 },
+        "offset": { "type": "integer", "minimum": 0, "default": 0 }
+      }
+    },
+    "generateRepairReport": {
+      "type": "object",
+      "properties": {
+        "reportType": { "type": "string", "enum": ["daily_summary", "technician_performance", "parts_usage", "revenue_analysis", "customer_satisfaction", "warranty_claims"] },
+        "dateFrom": { "type": "string", "format": "date" },
+        "dateTo": { "type": "string", "format": "date" },
+        "locationId": { "type": "string", "format": "uuid" },
+        "technicianId": { "type": "string", "format": "uuid" },
+        "includeDetails": { "type": "boolean", "default": true },
+        "format": { "type": "string", "enum": ["json", "pdf", "excel"], "default": "json" }
+      },
+      "required": ["reportType", "dateFrom", "dateTo"]
+    }
+  },
+  "outputs": {
+    "createRepairJob": {
+      "type": "object",
+      "properties": {
+        "success": { "type": "boolean" },
+        "repairJob": {
+          "type": "object",
+          "properties": {
+            "id": { "type": "string" },
+            "jobNumber": { "type": "string" },
+            "customerId": { "type": "string" },
+            "deviceInfo": { "type": "object" },
+            "status": { "type": "string" },
+            "createdAt": { "type": "string", "format": "date-time" },
+            "estimatedCompletion": { "type": "string", "format": "date-time" }
+          }
+        },
+        "customer": { "type": "object" },
+        "ticketNumber": { "type": "string" },
+        "qrCode": { "type": "string" },
+        "message": { "type": "string" },
+        "error": { "type": "string" }
+      }
+    },
+    "updateRepairStatus": {
+      "type": "object",
+      "properties": {
+        "success": { "type": "boolean" },
+        "repairJob": { "type": "object" },
+        "notification": {
+          "type": "object",
+          "properties": {
+            "sent": { "type": "boolean" },
+            "method": { "type": "string" },
+            "message": { "type": "string" }
+          }
+        },
+        "message": { "type": "string" },
+        "error": { "type": "string" }
+      }
+    },
+    "processRepairPayment": {
+      "type": "object",
+      "properties": {
+        "success": { "type": "boolean" },
+        "payment": {
+          "type": "object",
+          "properties": {
+            "id": { "type": "string" },
+            "amount": { "type": "number" },
+            "currency": { "type": "string" },
+            "method": { "type": "string" },
+            "status": { "type": "string" },
+            "reference": { "type": "string" }
+          }
+        },
+        "repairJob": { "type": "object" },
+        "receipt": { "type": "object" },
+        "message": { "type": "string" },
+        "error": { "type": "string" }
+      }
+    }
+  },
+  "actions": [
+    "createRepairJob",
+    "updateRepairStatus", 
+    "addRepairParts",
+    "createRepairEstimate",
+    "processRepairPayment",
+    "getRepairHistory",
+    "generateRepairReport",
+    "getRepairJobDetails",
+    "assignTechnician",
+    "sendCustomerNotification",
+    "generateQRCode",
+    "printRepairTicket",
+    "trackWarranty",
+    "scheduleFollowUp",
+    "exportRepairData",
+    "bulkStatusUpdate",
+    "deviceLookup",
+    "customerDeviceHistory",
+    "partsAvailability",
+    "repairAnalytics"
+  ],
+  "dependencies": [
+    "customer/CustomerProfile",
+    "inventory/InventoryTracking", 
+    "sales/SalesEngine",
+    "payment/SplitPayment"
+  ],
+  "created": "2025-09-16T00:00:00Z",
+  "updated": "2025-09-16T00:00:00Z"
+}
