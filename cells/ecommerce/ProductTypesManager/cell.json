@@ -1,0 +1,312 @@
+{
+  "id": "ecommerce/ProductTypesManager",
+  "name": "ProductTypesManager",
+  "sector": "ecommerce",  
+  "version": "1.0.0",
+  "description": "Advanced product type management supporting simple, variable, digital, bundled, and classified products with cellular reusability for Nigerian e-commerce",
+  "channels": ["stable", "canary"],
+  "inputs": {
+    "createSimpleProduct": {
+      "type": "object",
+      "properties": {
+        "productCode": { "type": "string", "maxLength": 100 },
+        "productName": { "type": "string", "maxLength": 200 },
+        "description": { "type": "string" },
+        "category": { "type": "string" },
+        "brand": { "type": "string", "maxLength": 100 },
+        "price": { "type": "number", "minimum": 0 },
+        "currency": { "type": "string", "enum": ["NGN", "USD", "GBP"], "default": "NGN" },
+        "weight": { "type": "number", "minimum": 0 },
+        "dimensions": { "type": "string", "maxLength": 100 },
+        "images": { "type": "array", "items": { "type": "string" } },
+        "sku": { "type": "string", "maxLength": 100 },
+        "barcode": { "type": "string", "maxLength": 100 },
+        "taxable": { "type": "boolean", "default": true },
+        "stockManaged": { "type": "boolean", "default": true },
+        "tags": { "type": "array", "items": { "type": "string" } },
+        "metadata": { "type": "object" }
+      },
+      "required": ["productCode", "productName", "price"]
+    },
+    "createVariableProduct": {
+      "type": "object", 
+      "properties": {
+        "baseProduct": { "$ref": "#/inputs/createSimpleProduct" },
+        "variationAttributes": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "name": { "type": "string", "maxLength": 50 },
+              "slug": { "type": "string", "maxLength": 50 },
+              "values": { "type": "array", "items": { "type": "string" } },
+              "isRequired": { "type": "boolean", "default": true },
+              "displayType": { "type": "string", "enum": ["dropdown", "color_swatch", "image_swatch", "button", "radio"], "default": "dropdown" }
+            },
+            "required": ["name", "slug", "values"]
+          }
+        },
+        "variations": {
+          "type": "array",
+          "items": {
+            "type": "object", 
+            "properties": {
+              "sku": { "type": "string", "maxLength": 100 },
+              "attributes": { "type": "object" },
+              "price": { "type": "number", "minimum": 0 },
+              "weight": { "type": "number", "minimum": 0 },
+              "dimensions": { "type": "string", "maxLength": 100 },
+              "image": { "type": "string" },
+              "stockQuantity": { "type": "integer", "minimum": 0, "default": 0 },
+              "enabled": { "type": "boolean", "default": true }
+            },
+            "required": ["sku", "attributes", "price"]
+          }
+        }
+      },
+      "required": ["baseProduct", "variationAttributes", "variations"]
+    },
+    "createDigitalProduct": {
+      "type": "object",
+      "properties": {
+        "baseProduct": { "$ref": "#/inputs/createSimpleProduct" },
+        "digitalAssets": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "fileName": { "type": "string", "maxLength": 255 },
+              "fileUrl": { "type": "string", "maxLength": 500 },
+              "fileSize": { "type": "integer", "minimum": 0 },
+              "fileType": { "type": "string", "maxLength": 50 },
+              "downloadLimit": { "type": "integer", "minimum": -1, "default": -1 },
+              "expiryDays": { "type": "integer", "minimum": 0, "default": 365 }
+            },
+            "required": ["fileName", "fileUrl", "fileType"]
+          }
+        },
+        "licenseType": { "type": "string", "enum": ["single_use", "multi_use", "unlimited", "subscription"], "default": "single_use" },
+        "accessInstructions": { "type": "string" },
+        "supportEmail": { "type": "string", "format": "email" },
+        "autoFulfillment": { "type": "boolean", "default": true }
+      },
+      "required": ["baseProduct", "digitalAssets"]
+    },
+    "createBundledProduct": {
+      "type": "object",
+      "properties": {
+        "baseProduct": { "$ref": "#/inputs/createSimpleProduct" },
+        "bundleItems": {
+          "type": "array", 
+          "items": {
+            "type": "object",
+            "properties": {
+              "productId": { "type": "string", "format": "uuid" },
+              "variationId": { "type": "string", "format": "uuid" },
+              "quantity": { "type": "integer", "minimum": 1, "default": 1 },
+              "discountAmount": { "type": "number", "minimum": 0, "default": 0 },
+              "discountType": { "type": "string", "enum": ["fixed", "percentage"], "default": "fixed" },
+              "isOptional": { "type": "boolean", "default": false }
+            },
+            "required": ["productId", "quantity"]
+          }
+        },
+        "bundleType": { "type": "string", "enum": ["fixed", "flexible"], "default": "fixed" },
+        "bundleDiscount": { "type": "number", "minimum": 0, "default": 0 },
+        "bundleDiscountType": { "type": "string", "enum": ["fixed", "percentage"], "default": "percentage" },
+        "minItems": { "type": "integer", "minimum": 1 },
+        "maxItems": { "type": "integer", "minimum": 1 }
+      },
+      "required": ["baseProduct", "bundleItems"]
+    },
+    "createClassifiedProduct": {
+      "type": "object",
+      "properties": {
+        "baseProduct": { "$ref": "#/inputs/createSimpleProduct" },
+        "classificationLevel": { "type": "string", "enum": ["public", "restricted", "confidential", "top_secret"], "default": "public" },
+        "accessControls": {
+          "type": "object",
+          "properties": {
+            "requiredRoles": { "type": "array", "items": { "type": "string" } },
+            "requiredPermissions": { "type": "array", "items": { "type": "string" } },
+            "locationRestrictions": { "type": "array", "items": { "type": "string" } },
+            "timeRestrictions": {
+              "type": "object",
+              "properties": {
+                "allowedHours": { "type": "string", "pattern": "^[0-9]{2}:[0-9]{2}-[0-9]{2}:[0-9]{2}$" },
+                "allowedDays": { "type": "array", "items": { "type": "string", "enum": ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"] } },
+                "timezone": { "type": "string", "default": "Africa/Lagos" }
+              }
+            }
+          }
+        },
+        "complianceRequirements": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "standard": { "type": "string", "maxLength": 100 },
+              "requirement": { "type": "string" },
+              "verified": { "type": "boolean", "default": false },
+              "verifiedBy": { "type": "string", "format": "uuid" },
+              "verifiedDate": { "type": "string", "format": "date" },
+              "expiryDate": { "type": "string", "format": "date" }
+            },
+            "required": ["standard", "requirement"]
+          }
+        },
+        "auditTrail": { "type": "boolean", "default": true },
+        "encryptionRequired": { "type": "boolean", "default": false }
+      },
+      "required": ["baseProduct", "classificationLevel"]
+    },
+    "updateProductType": {
+      "type": "object",
+      "properties": {
+        "productId": { "type": "string", "format": "uuid" },
+        "productType": { "type": "string", "enum": ["simple", "variable", "digital", "bundled", "classified"] },
+        "typeSpecificData": { "type": "object" }
+      },
+      "required": ["productId", "productType"]
+    },
+    "getProductsByType": {
+      "type": "object",
+      "properties": {
+        "productType": { "type": "string", "enum": ["simple", "variable", "digital", "bundled", "classified"] },
+        "filters": { "type": "object" },
+        "limit": { "type": "integer", "minimum": 1, "maximum": 100, "default": 20 },
+        "offset": { "type": "integer", "minimum": 0, "default": 0 }
+      },
+      "required": ["productType"]
+    },
+    "convertProductType": {
+      "type": "object",
+      "properties": {
+        "productId": { "type": "string", "format": "uuid" },
+        "fromType": { "type": "string", "enum": ["simple", "variable", "digital", "bundled", "classified"] },
+        "toType": { "type": "string", "enum": ["simple", "variable", "digital", "bundled", "classified"] },
+        "conversionOptions": { "type": "object" }
+      },
+      "required": ["productId", "fromType", "toType"]
+    }
+  },
+  "outputs": {
+    "createProduct": {
+      "type": "object",
+      "properties": {
+        "success": { "type": "boolean" },
+        "product": {
+          "type": "object",
+          "properties": {
+            "id": { "type": "string", "format": "uuid" },
+            "productType": { "type": "string" },
+            "productCode": { "type": "string" },
+            "productName": { "type": "string" },
+            "price": { "type": "number" },
+            "currency": { "type": "string" },
+            "stockManaged": { "type": "boolean" },
+            "variations": { "type": "array" },
+            "digitalAssets": { "type": "array" },
+            "bundleItems": { "type": "array" },
+            "classificationLevel": { "type": "string" },
+            "createdAt": { "type": "string", "format": "date-time" },
+            "updatedAt": { "type": "string", "format": "date-time" }
+          }
+        },
+        "typeSpecificData": { "type": "object" },
+        "message": { "type": "string" },
+        "error": { "type": "string" }
+      }
+    },
+    "getProductsByType": {
+      "type": "object", 
+      "properties": {
+        "success": { "type": "boolean" },
+        "products": { "type": "array", "items": { "$ref": "#/outputs/createProduct/properties/product" } },
+        "pagination": {
+          "type": "object",
+          "properties": {
+            "total": { "type": "integer" },
+            "limit": { "type": "integer" },
+            "offset": { "type": "integer" },
+            "hasMore": { "type": "boolean" }
+          }
+        },
+        "typeStats": {
+          "type": "object",
+          "properties": {
+            "totalProducts": { "type": "integer" },
+            "activeProducts": { "type": "integer" },
+            "inactiveProducts": { "type": "integer" },
+            "averagePrice": { "type": "number" },
+            "totalVariations": { "type": "integer" }
+          }
+        },
+        "message": { "type": "string" },
+        "error": { "type": "string" }
+      }
+    },
+    "convertProductType": {
+      "type": "object",
+      "properties": {
+        "success": { "type": "boolean" },
+        "convertedProduct": { "$ref": "#/outputs/createProduct/properties/product" },
+        "conversionSummary": {
+          "type": "object",
+          "properties": {
+            "originalType": { "type": "string" },
+            "newType": { "type": "string" },
+            "dataPreserved": { "type": "array", "items": { "type": "string" } },
+            "dataLost": { "type": "array", "items": { "type": "string" } },
+            "warnings": { "type": "array", "items": { "type": "string" } }
+          }
+        },
+        "message": { "type": "string" },
+        "error": { "type": "string" }
+      }
+    }
+  },
+  "actions": [
+    "createSimpleProduct",
+    "createVariableProduct", 
+    "createDigitalProduct",
+    "createBundledProduct",
+    "createClassifiedProduct",
+    "updateProductType",
+    "getProductsByType",
+    "convertProductType",
+    "getProductTypeDefinition",
+    "validateProductType",
+    "getProductVariations",
+    "getBundleComponents",
+    "getDigitalAssets",
+    "getClassificationDetails",
+    "bulkUpdateProductTypes",
+    "duplicateProduct",
+    "exportProductsByType",
+    "getProductTypeAnalytics",
+    "validateBundleIntegrity",
+    "updateDigitalAssets",
+    "updateAccessControls",
+    "auditClassifiedProduct",
+    "generateProductMatrix"
+  ],
+  "dependencies": [
+    "inventory/ProductCatalog",
+    "inventory/InventoryTracking"
+  ],
+  "routes": [
+    "/api/cells/ecommerce/ProductTypesManager"
+  ],
+  "tables": [
+    "product_types",
+    "product_variations",
+    "digital_assets",
+    "bundle_items", 
+    "product_classifications",
+    "product_access_controls"
+  ],
+  "integrations": [],
+  "created": "2025-09-16T00:00:00Z",
+  "updated": "2025-09-16T00:00:00Z"
+}
