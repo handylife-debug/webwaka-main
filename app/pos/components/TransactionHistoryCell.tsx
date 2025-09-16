@@ -60,6 +60,49 @@ export default function TransactionHistoryCell({
     }
   }, [isVisible])
 
+  // Load transactions from PostgreSQL API
+  const loadTransactionHistory = async () => {
+    setIsLoading(true)
+    try {
+      // Get tenant ID from current subdomain or context
+      const tenantId = 'default-tenant' // In production, this would come from context
+      
+      const response = await fetch(`/api/pos/transactions?tenantId=${tenantId}&limit=50`)
+      
+      if (!response.ok) {
+        throw new Error('Failed to fetch transactions')
+      }
+
+      const data = await response.json()
+      
+      // Transform API data to match TransactionHistoryItem interface
+      const transformedTransactions: TransactionHistoryItem[] = (data.data || []).map((tx: any) => ({
+        id: tx.id,
+        transactionNumber: tx.transaction_number,
+        reference: tx.reference,
+        amount: parseFloat(tx.total),
+        paymentMethod: tx.payment_method,
+        status: tx.payment_status,
+        customerInfo: tx.customer_info || {},
+        items: tx.items || [],
+        fees: tx.fees ? tx.fees.reduce((sum: number, fee: any) => sum + fee.amount, 0) : 0,
+        refunds: tx.refunds || [],
+        cashier: tx.cashier,
+        createdAt: tx.created_at,
+        refundable: tx.refundable !== false
+      }))
+
+      setTransactions(transformedTransactions)
+      
+    } catch (error) {
+      console.error('Failed to load transaction history:', error)
+      // Fallback to empty array if API fails
+      setTransactions([])
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
   // Filter transactions based on search and status
   useEffect(() => {
     let filtered = transactions
@@ -80,84 +123,79 @@ export default function TransactionHistoryCell({
     setFilteredTransactions(filtered)
   }, [transactions, searchTerm, statusFilter])
 
-  const loadTransactionHistory = async () => {
-    setIsLoading(true)
-    try {
-      // Mock transaction history - in real app, load from database
-      const mockTransactions: TransactionHistoryItem[] = [
-        {
-          id: 'txn_001',
-          transactionNumber: 'TXN-001',
-          reference: 'ps_2025091500001',
-          amount: 15.75,
-          paymentMethod: 'Paystack',
-          status: 'completed',
-          customerInfo: {
-            name: 'John Doe',
-            email: 'john.doe@email.com'
-          },
-          items: [
-            { name: 'Espresso', quantity: 2, price: 2.50 },
-            { name: 'Blueberry Muffin', quantity: 1, price: 2.75 }
-          ],
-          fees: 0.24,
-          cashier: 'Admin User',
-          createdAt: new Date(Date.now() - 3600000).toISOString(),
-          refundable: true
+  // Load mock transactions for fallback/demo purposes
+  const loadMockTransactions = () => {
+    const mockTransactions: TransactionHistoryItem[] = [
+      {
+        id: 'txn_001',
+        transactionNumber: 'TXN-001',
+        reference: 'ps_2025091500001',
+        amount: 15.75,
+        paymentMethod: 'Paystack',
+        status: 'completed',
+        customerInfo: {
+          name: 'John Doe',
+          email: 'john.doe@email.com'
         },
-        {
-          id: 'txn_002',
-          transactionNumber: 'TXN-002',
-          reference: 'cash_2025091500002',
-          amount: 8.50,
-          paymentMethod: 'Cash',
-          status: 'completed',
-          customerInfo: {
-            name: 'Jane Smith'
-          },
-          items: [
-            { name: 'Cappuccino', quantity: 1, price: 4.50 },
-            { name: 'BBQ Chips', quantity: 1, price: 2.25 }
-          ],
-          cashier: 'Admin User',
-          createdAt: new Date(Date.now() - 7200000).toISOString(),
-          refundable: true
+        items: [
+          { name: 'Espresso', quantity: 2, price: 2.50 },
+          { name: 'Blueberry Muffin', quantity: 1, price: 2.75 }
+        ],
+        fees: 0.24,
+        cashier: 'Admin User',
+        createdAt: new Date(Date.now() - 3600000).toISOString(),
+        refundable: true
+      },
+      {
+        id: 'txn_002',
+        transactionNumber: 'TXN-002',
+        reference: 'cash_2025091500002',
+        amount: 8.50,
+        paymentMethod: 'Cash',
+        status: 'completed',
+        customerInfo: {
+          name: 'Jane Smith'
         },
-        {
-          id: 'txn_003',
-          transactionNumber: 'TXN-003',
-          reference: 'mw_2025091500003',
-          amount: 12.25,
-          paymentMethod: 'Mobile Wallet',
-          status: 'refunded',
-          customerInfo: {
-            name: 'Bob Johnson',
-            phone: '+234-801-234-5678'
-          },
-          items: [
-            { name: 'Cappuccino', quantity: 2, price: 4.50 }
-          ],
-          refunds: [
-            {
-              id: 'ref_001',
-              amount: 12.25,
-              reason: 'Customer requested full refund',
-              status: 'completed',
-              processedAt: new Date(Date.now() - 1800000).toISOString()
-            }
-          ],
-          cashier: 'Admin User',
-          createdAt: new Date(Date.now() - 10800000).toISOString(),
-          refundable: false
-        }
-      ]
+        items: [
+          { name: 'Cappuccino', quantity: 1, price: 4.50 },
+          { name: 'BBQ Chips', quantity: 1, price: 2.25 }
+        ],
+        fees: 0,
+        cashier: 'Admin User',
+        createdAt: new Date(Date.now() - 7200000).toISOString(),
+        refundable: true
+      },
+      {
+        id: 'txn_003',
+        transactionNumber: 'TXN-003',
+        reference: 'mw_2025091500003',
+        amount: 12.25,
+        paymentMethod: 'Mobile Wallet',
+        status: 'refunded',
+        customerInfo: {
+          name: 'Bob Johnson',
+          phone: '+234-801-234-5678'
+        },
+        items: [
+          { name: 'Cappuccino', quantity: 2, price: 4.50 }
+        ],
+        fees: 0,
+        refunds: [
+          {
+            id: 'ref_001',
+            amount: 12.25,
+            reason: 'Customer requested full refund',
+            status: 'completed',
+            processedAt: new Date(Date.now() - 1800000).toISOString()
+          }
+        ],
+        cashier: 'Admin User',
+        createdAt: new Date(Date.now() - 10800000).toISOString(),
+        refundable: false
+      }
+    ]
 
-      setTransactions(mockTransactions)
-    } catch (error) {
-      console.error('Error loading transaction history:', error)
-    } finally {
-      setIsLoading(false)
-    }
+    setTransactions(mockTransactions)
   }
 
   const handleRefund = async () => {
