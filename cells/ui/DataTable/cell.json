@@ -1,0 +1,81 @@
+{
+  "id": "ui/DataTable",
+  "name": "DataTable",
+  "sector": "ui",
+  "version": "1.0.0",
+  "description": "Responsive data table with action dropdowns, loading states, pagination, and mobile-optimized view",
+  "channels": ["stable", "canary"],
+  "inputs": {
+    "renderTable": {
+      "type": "object",
+      "properties": {
+        "columns": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "key": { "type": "string" },
+              "label": { "type": "string" },
+              "sortable": { "type": "boolean" },
+              "width": { "type": "string" },
+              "align": { "type": "string", "enum": ["left", "center", "right"] },
+              "render": { "type": "string" }
+            }
+          }
+        },
+        "data": { "type": "array" },
+        "loading": { "type": "boolean" },
+        "emptyState": {
+          "type": "object",
+          "properties": {
+            "icon": { "type": "string" },
+            "title": { "type": "string" },
+            "description": { "type": "string" }
+          }
+        },
+        "actions": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "label": { "type": "string" },
+              "icon": { "type": "string" },
+              "variant": { "type": "string" },
+              "onClick": { "type": "string" }
+            }
+          }
+        },
+        "mobileCard": { "type": "boolean" },
+        "pagination": {
+          "type": "object",
+          "properties": {
+            "enabled": { "type": "boolean" },
+            "pageSize": { "type": "number" },
+            "totalItems": { "type": "number" }
+          }
+        },
+        "selection": {
+          "type": "object",
+          "properties": {
+            "enabled": { "type": "boolean" },
+            "multiple": { "type": "boolean" }
+          }
+        }
+      },
+      "required": ["columns", "data"]
+    }
+  },
+  "outputs": {
+    "renderTable": {
+      "type": "object",
+      "properties": {
+        "component": { "type": "string" },
+        "selectedItems": { "type": "array" }
+      }
+    }
+  },
+  "actions": ["renderTable", "handleSort", "handleAction", "handleSelection"],
+  "dependencies": ["@/components/ui/table", "@/components/ui/dropdown-menu", "@/components/ui/button"],
+  "created": "2025-01-16T00:00:00Z",
+  "updated": "2025-01-16T00:00:00Z"
+}
