@@ -1,0 +1,46 @@
+{
+  "name": "PWAInstallPrompt",
+  "version": "1.0.0",
+  "description": "Progressive Web App installation prompt component optimized for Nigerian businesses with offline-first capabilities",
+  "category": "Mobile",
+  "tags": ["pwa", "mobile", "installation", "offline", "nigerian-market", "progressive-web-app"],
+  "type": "mobile-enhancement",
+  "complexity": "intermediate",
+  "nigerianMarketSpecific": true,
+  "webwakaBiologicalType": "cell",
+  "compositionLevel": "tissue-ready",
+  "author": "WebWaka Biological System",
+  "license": "Enterprise",
+  "dependencies": {
+    "lucide-react": "latest",
+    "@/components/ui/button": "latest",
+    "@/components/ui/dialog": "latest",
+    "@/components/ui/card": "latest"
+  },
+  "features": {
+    "installPrompt": true,
+    "offlineDetection": true,
+    "nigerianLocalization": true,
+    "dataUsageOptimization": true,
+    "batteryConsciousOperations": true,
+    "mobileFriendlyInterface": true,
+    "installStatusTracking": true,
+    "customInstallation": true,
+    "shareAPIIntegration": true,
+    "backgroundSync": true
+  },
+  "businessValue": {
+    "userEngagement": "high",
+    "offlineReliability": "critical",
+    "mobileOptimization": "perfect",
+    "nigerianMarketFit": "excellent",
+    "installationConversion": "optimized"
+  },
+  "mobileOptimizations": {
+    "touchFriendly": true,
+    "lowBandwidthSupport": true,
+    "batteryEfficient": true,
+    "offlineCapable": true,
+    "fastLoading": true
+  }
+}
