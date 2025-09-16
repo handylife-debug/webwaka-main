@@ -8,6 +8,7 @@ export interface User {
   email: string;
   name: string;
   role: UserRole;
+  tenant_id: string; // Critical: Proper tenant isolation
 }
 
 // Mock user store - replace with your actual auth provider
@@ -17,18 +18,21 @@ const mockUsers: Record<string, User> = {
     email: 'superadmin@example.com',
     name: 'Super Admin',
     role: 'SuperAdmin',
+    tenant_id: 'main-tenant-uuid', // SuperAdmin belongs to main tenant
   },
   'partner@example.com': {
     id: '2',
     email: 'partner@example.com',
     name: 'Partner User',
     role: 'Partner',
+    tenant_id: 'main-tenant-uuid', // Default to main tenant for now
   },
   'admin@example.com': {
     id: '3',
     email: 'admin@example.com',
     name: 'Admin User',
     role: 'Admin',
+    tenant_id: 'main-tenant-uuid', // Default to main tenant for now
   },
 };
 
