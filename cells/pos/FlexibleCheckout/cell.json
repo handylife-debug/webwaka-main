@@ -1,0 +1,31 @@
+{
+  "name": "FlexibleCheckout",
+  "version": "1.0.0",
+  "description": "Advanced checkout flow with multiple payment options and split payments",
+  "dependencies": ["CC-002.1", "CC-005.1"],
+  "category": "pos",
+  "type": "component",
+  "tags": ["checkout", "payment", "split-payment", "transaction"],
+  "author": "WebWaka Team",
+  "exports": {
+    "client": "./src/client.tsx",
+    "server": "./src/server.ts"
+  },
+  "props": {
+    "tenantId": "string",
+    "cartItems": "array",
+    "customer": "object",
+    "className": "string",
+    "onTransactionComplete": "function",
+    "onPaymentMethodChange": "function",
+    "allowSplitPayment": "boolean"
+  },
+  "features": [
+    "Multiple payment methods",
+    "Split payment support",
+    "Nigerian payment gateways",
+    "Customer data integration",
+    "Real-time payment processing",
+    "Transaction verification"
+  ]
+}
