@@ -2,7 +2,7 @@ import type { NextConfig } from "next";
 
 const withPWA = require('next-pwa')({
   dest: 'public',
-  disable: true, // Temporarily disabled to fix deployment
+  disable: false, // Enabled for MOD-501-3: Mobile App Infrastructure
   register: true,
   skipWaiting: true,
   clientsClaim: true,
