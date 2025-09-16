@@ -1,8 +1,38 @@
 {
-  "name": "POS Business Management System",
-  "short_name": "POS Manager",
-  "description": "Advanced Point-of-Sale and Business Management Solution",
+  "name": "WebWaka POS - Nigerian Business Platform",
+  "short_name": "WebWaka POS",
+  "description": "Complete multi-tenant Point of Sale platform for Nigerian businesses with advanced analytics, payment processing, and inventory management",
   "icons": [
+    {
+      "src": "/icons/icon-72x72.png",
+      "sizes": "72x72",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/icons/icon-96x96.png",
+      "sizes": "96x96",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/icons/icon-128x128.png",
+      "sizes": "128x128",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/icons/icon-144x144.png",
+      "sizes": "144x144",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/icons/icon-152x152.png",
+      "sizes": "152x152",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
     {
       "src": "/icons/icon-192x192.png",
       "sizes": "192x192",
@@ -40,6 +70,112 @@
   "background_color": "#ffffff",
   "scope": "/",
   "categories": ["business", "productivity", "finance"],
-  "lang": "en",
-  "dir": "ltr"
+  "lang": "en-NG",
+  "dir": "ltr",
+  "shortcuts": [
+    {
+      "name": "Quick Sale",
+      "short_name": "Sale",
+      "description": "Start a new sale transaction",
+      "url": "/pos?action=quick_sale",
+      "icons": [
+        {
+          "src": "/icons/shortcut-sale.png",
+          "sizes": "96x96"
+        }
+      ]
+    },
+    {
+      "name": "Inventory Check",
+      "short_name": "Inventory",
+      "description": "Check current inventory levels",
+      "url": "/inventory?view=quick_check",
+      "icons": [
+        {
+          "src": "/icons/shortcut-inventory.png",
+          "sizes": "96x96"
+        }
+      ]
+    },
+    {
+      "name": "Analytics Dashboard",
+      "short_name": "Analytics",
+      "description": "View business intelligence dashboard",
+      "url": "/analytics?view=dashboard",
+      "icons": [
+        {
+          "src": "/icons/shortcut-analytics.png",
+          "sizes": "96x96"
+        }
+      ]
+    },
+    {
+      "name": "Customer Management",
+      "short_name": "Customers",
+      "description": "Manage customer profiles and data",
+      "url": "/customers?action=manage",
+      "icons": [
+        {
+          "src": "/icons/shortcut-customers.png",
+          "sizes": "96x96"
+        }
+      ]
+    }
+  ],
+  "screenshots": [
+    {
+      "src": "/screenshots/desktop-wide.png",
+      "sizes": "1920x1080",
+      "type": "image/png",
+      "form_factor": "wide",
+      "label": "WebWaka POS Dashboard - Desktop View"
+    },
+    {
+      "src": "/screenshots/mobile-narrow.png", 
+      "sizes": "375x812",
+      "type": "image/png",
+      "form_factor": "narrow",
+      "label": "WebWaka POS Mobile - Transaction Processing"
+    }
+  ],
+  "related_applications": [
+    {
+      "platform": "play",
+      "url": "https://play.google.com/store/apps/details?id=com.webwaka.pos",
+      "id": "com.webwaka.pos"
+    },
+    {
+      "platform": "itunes",
+      "url": "https://apps.apple.com/app/webwaka-pos/id123456789"
+    }
+  ],
+  "prefer_related_applications": false,
+  "edge_side_panel": {
+    "preferred_width": 400
+  },
+  "launch_handler": {
+    "client_mode": "focus-existing"
+  },
+  "protocol_handlers": [
+    {
+      "protocol": "webwaka",
+      "url": "/app?protocol=%s"
+    }
+  ],
+  "share_target": {
+    "action": "/share-receipt",
+    "method": "POST",
+    "enctype": "multipart/form-data",
+    "params": {
+      "title": "title",
+      "text": "text",
+      "url": "url",
+      "files": [
+        {
+          "name": "receipt",
+          "accept": ["image/*", ".pdf", ".json"]
+        }
+      ]
+    }
+  }
 }
