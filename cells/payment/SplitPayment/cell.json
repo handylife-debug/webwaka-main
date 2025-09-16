@@ -1,0 +1,520 @@
+{
+  "id": "SplitPayment",
+  "name": "Split Payment Cell",
+  "description": "Enterprise split payment, partial payment, and layaway system Cell supporting multi-party transactions, installment plans, and product reservation with integrated Nigerian payment gateways for the WebWaka Biological system",
+  "version": "1.0.0",
+  "type": "cross-cutting",
+  "category": "payment",
+  "tags": ["payment", "split", "partial", "layaway", "installments", "marketplace", "nigerian", "multi-party", "enterprise", "cross-cutting", "CC-002-2"],
+  "dependencies": {
+    "external": [
+      "zod",
+      "next",
+      "axios",
+      "@types/node",
+      "uuid"
+    ],
+    "internal": [
+      "PaymentGatewayCore",
+      "AuthenticationCore", 
+      "JWTTokenManager"
+    ]
+  },
+  "environment": {
+    "required": [],
+    "optional": [
+      "SPLIT_PAYMENT_MAX_PARTIES",
+      "LAYAWAY_DEFAULT_PERIOD_DAYS", 
+      "INSTALLMENT_MAX_DURATION_MONTHS",
+      "PAYMENT_REMINDER_INTERVAL_DAYS"
+    ]
+  },
+  "features": {
+    "splitPayment": {
+      "multiPartyTransactions": true,
+      "percentageSplits": true,
+      "amountSplits": true,
+      "marketplaceCommissions": true,
+      "dynamicSplitCalculation": true,
+      "maxPartiesPerTransaction": 10,
+      "minSplitAmount": 1.00,
+      "roundingPrecision": "banker",
+      "splitTypes": ["percentage", "fixed_amount", "remaining", "commission"]
+    },
+    "partialPayments": {
+      "installmentPlans": true,
+      "flexibleSchedules": true,
+      "automaticReminders": true,
+      "lateFees": true,
+      "earlyPaymentDiscounts": true,
+      "paymentMethodSwitching": true,
+      "maxInstallments": 24,
+      "minInstallmentAmount": 10.00,
+      "defaultReminderDays": [7, 3, 1]
+    },
+    "layawaySystem": {
+      "productReservation": true,
+      "depositTracking": true,
+      "installmentTracking": true,
+      "completionHandling": true,
+      "expiryManagement": true,
+      "minDepositPercentage": 10,
+      "maxLayawayPeriodDays": 180,
+      "defaultLayawayPeriodDays": 90,
+      "automaticExpiry": true
+    },
+    "multiMethodSupport": {
+      "combinedPayments": true,
+      "walletIntegration": true,
+      "creditSupport": true,
+      "loyaltyPoints": true,
+      "giftCards": true,
+      "supportedMethods": ["card", "bank", "ussd", "mobile_money", "wallet", "credit", "points", "gift_card"]
+    },
+    "nigerianIntegration": {
+      "paystackSplits": true,
+      "flutterwaveSplits": true,
+      "interswitchSplits": true,
+      "multiCurrencySupport": true,
+      "bankTransferSplits": true,
+      "mobilePaymentSplits": true,
+      "supportedCurrencies": ["NGN", "USD", "EUR", "GBP", "ZAR", "KES", "GHS", "UGX", "RWF"]
+    },
+    "businessLogic": {
+      "roundingCalculation": true,
+      "balanceTracking": true,
+      "progressTracking": true,
+      "commissionCalculation": true,
+      "reminderSystem": true,
+      "expiryHandling": true,
+      "refundSplitting": true,
+      "disputeHandling": true
+    }
+  },
+  "api": {
+    "endpoints": [
+      {
+        "path": "/api/cells/payment/SplitPayment",
+        "method": "POST",
+        "description": "Main split payment Cell API endpoint",
+        "actions": [
+          "initializeSplitPayment",
+          "calculateSplitAmounts",
+          "createInstallmentPlan",
+          "processPartialPayment",
+          "initializeLayaway",
+          "updateLayawayPayment",
+          "completeLayaway",
+          "cancelLayaway",
+          "processMultiMethodPayment",
+          "getSplitPaymentStatus",
+          "getInstallmentSchedule",
+          "getLayawayDetails",
+          "sendPaymentReminder",
+          "validateSplitConfiguration",
+          "getPaymentHistory",
+          "processRefund",
+          "handleDispute",
+          "calculateCommissions",
+          "getMarketplaceReports"
+        ]
+      }
+    ]
+  },
+  "schemas": {
+    "SplitPaymentIntent": {
+      "type": "object",
+      "required": ["totalAmount", "currency", "splits", "provider"],
+      "properties": {
+        "totalAmount": {
+          "type": "number",
+          "minimum": 1.00,
+          "description": "Total payment amount in the currency's major unit"
+        },
+        "currency": {
+          "type": "string",
+          "enum": ["NGN", "USD", "EUR", "GBP", "ZAR", "KES", "GHS", "UGX", "RWF"],
+          "default": "NGN"
+        },
+        "provider": {
+          "type": "string",
+          "enum": ["paystack", "flutterwave", "interswitch"],
+          "description": "Nigerian payment processor to use"
+        },
+        "splits": {
+          "type": "array",
+          "minItems": 2,
+          "maxItems": 10,
+          "items": {
+            "$ref": "#/schemas/PaymentSplit"
+          }
+        },
+        "description": {
+          "type": "string",
+          "maxLength": 500
+        },
+        "metadata": {
+          "type": "object",
+          "description": "Additional split payment metadata"
+        },
+        "customerId": {
+          "type": "string",
+          "description": "Primary customer making the payment"
+        },
+        "merchantId": {
+          "type": "string",
+          "description": "Primary merchant receiving the payment"
+        },
+        "reference": {
+          "type": "string",
+          "description": "Unique payment reference"
+        },
+        "tenantId": {
+          "type": "string",
+          "description": "Tenant ID for multi-tenant isolation"
+        },
+        "userId": {
+          "type": "string",
+          "description": "User initiating the split payment"
+        }
+      }
+    },
+    "PaymentSplit": {
+      "type": "object",
+      "required": ["recipient", "type"],
+      "properties": {
+        "recipient": {
+          "type": "object",
+          "required": ["id", "type"],
+          "properties": {
+            "id": {
+              "type": "string",
+              "description": "Recipient identifier (account number, user ID, etc.)"
+            },
+            "type": {
+              "type": "string",
+              "enum": ["merchant", "partner", "platform", "service_fee", "tax", "custom"],
+              "description": "Type of split recipient"
+            },
+            "name": {
+              "type": "string",
+              "description": "Recipient display name"
+            },
+            "email": {
+              "type": "string",
+              "format": "email"
+            },
+            "bankAccount": {
+              "type": "object",
+              "properties": {
+                "accountNumber": {"type": "string"},
+                "bankCode": {"type": "string"},
+                "accountName": {"type": "string"}
+              }
+            }
+          }
+        },
+        "type": {
+          "type": "string",
+          "enum": ["percentage", "fixed_amount", "remaining", "commission"],
+          "description": "How the split amount is calculated"
+        },
+        "value": {
+          "type": "number",
+          "minimum": 0,
+          "description": "Split value (percentage 0-100 or fixed amount)"
+        },
+        "minimumAmount": {
+          "type": "number",
+          "minimum": 0,
+          "description": "Minimum amount for this split"
+        },
+        "maximumAmount": {
+          "type": "number",
+          "minimum": 0,
+          "description": "Maximum amount for this split"
+        },
+        "description": {
+          "type": "string",
+          "maxLength": 200
+        },
+        "metadata": {
+          "type": "object"
+        }
+      }
+    },
+    "InstallmentPlan": {
+      "type": "object",
+      "required": ["totalAmount", "numberOfInstallments", "frequency"],
+      "properties": {
+        "totalAmount": {
+          "type": "number",
+          "minimum": 1.00
+        },
+        "numberOfInstallments": {
+          "type": "integer",
+          "minimum": 2,
+          "maximum": 24
+        },
+        "frequency": {
+          "type": "string",
+          "enum": ["weekly", "bi_weekly", "monthly", "custom"],
+          "description": "Payment frequency"
+        },
+        "startDate": {
+          "type": "string",
+          "format": "date",
+          "description": "First payment date"
+        },
+        "downPayment": {
+          "type": "number",
+          "minimum": 0,
+          "description": "Initial payment amount"
+        },
+        "interestRate": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 50,
+          "description": "Annual interest rate percentage"
+        },
+        "lateFeeAmount": {
+          "type": "number",
+          "minimum": 0
+        },
+        "lateFeeType": {
+          "type": "string",
+          "enum": ["fixed", "percentage"],
+          "default": "fixed"
+        },
+        "earlyPaymentDiscount": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 100
+        },
+        "currency": {
+          "type": "string",
+          "enum": ["NGN", "USD", "EUR", "GBP", "ZAR", "KES", "GHS", "UGX", "RWF"],
+          "default": "NGN"
+        },
+        "customerId": {
+          "type": "string"
+        },
+        "description": {
+          "type": "string",
+          "maxLength": 500
+        }
+      }
+    },
+    "LayawayOrder": {
+      "type": "object",
+      "required": ["totalAmount", "minimumDeposit", "products"],
+      "properties": {
+        "totalAmount": {
+          "type": "number",
+          "minimum": 1.00
+        },
+        "minimumDeposit": {
+          "type": "number",
+          "minimum": 1.00
+        },
+        "depositPercentage": {
+          "type": "number",
+          "minimum": 5,
+          "maximum": 50,
+          "default": 10
+        },
+        "layawayPeriodDays": {
+          "type": "integer",
+          "minimum": 7,
+          "maximum": 180,
+          "default": 90
+        },
+        "products": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "required": ["id", "name", "price", "quantity"],
+            "properties": {
+              "id": {"type": "string"},
+              "name": {"type": "string"},
+              "price": {"type": "number"},
+              "quantity": {"type": "integer"},
+              "sku": {"type": "string"},
+              "category": {"type": "string"}
+            }
+          }
+        },
+        "currency": {
+          "type": "string",
+          "enum": ["NGN", "USD", "EUR", "GBP", "ZAR", "KES", "GHS", "UGX", "RWF"],
+          "default": "NGN"
+        },
+        "customerId": {
+          "type": "string"
+        },
+        "merchantId": {
+          "type": "string"
+        },
+        "expiryDate": {
+          "type": "string",
+          "format": "date"
+        },
+        "reminderSchedule": {
+          "type": "array",
+          "items": {
+            "type": "integer"
+          },
+          "description": "Days before expiry to send reminders"
+        },
+        "autoRenew": {
+          "type": "boolean",
+          "default": false
+        }
+      }
+    },
+    "MultiMethodPayment": {
+      "type": "object",
+      "required": ["totalAmount", "paymentMethods"],
+      "properties": {
+        "totalAmount": {
+          "type": "number",
+          "minimum": 1.00
+        },
+        "currency": {
+          "type": "string",
+          "enum": ["NGN", "USD", "EUR", "GBP", "ZAR", "KES", "GHS", "UGX", "RWF"],
+          "default": "NGN"
+        },
+        "paymentMethods": {
+          "type": "array",
+          "minItems": 2,
+          "maxItems": 5,
+          "items": {
+            "type": "object",
+            "required": ["method", "amount"],
+            "properties": {
+              "method": {
+                "type": "string",
+                "enum": ["card", "bank", "ussd", "mobile_money", "wallet", "credit", "points", "gift_card"]
+              },
+              "amount": {
+                "type": "number",
+                "minimum": 0.01
+              },
+              "provider": {
+                "type": "string",
+                "enum": ["paystack", "flutterwave", "interswitch"]
+              },
+              "accountDetails": {
+                "type": "object",
+                "description": "Method-specific account details"
+              }
+            }
+          }
+        },
+        "customerId": {
+          "type": "string"
+        }
+      }
+    },
+    "PaymentStatus": {
+      "type": "object",
+      "properties": {
+        "id": {"type": "string"},
+        "reference": {"type": "string"},
+        "status": {
+          "type": "string",
+          "enum": ["pending", "processing", "completed", "failed", "cancelled", "disputed", "refunded", "partially_paid"]
+        },
+        "type": {
+          "type": "string",
+          "enum": ["split_payment", "installment", "layaway", "multi_method"]
+        },
+        "totalAmount": {"type": "number"},
+        "paidAmount": {"type": "number"},
+        "remainingAmount": {"type": "number"},
+        "currency": {"type": "string"},
+        "provider": {"type": "string"},
+        "createdAt": {"type": "string", "format": "date-time"},
+        "updatedAt": {"type": "string", "format": "date-time"},
+        "completedAt": {"type": "string", "format": "date-time"},
+        "splits": {"type": "array"},
+        "installments": {"type": "array"},
+        "metadata": {"type": "object"}
+      }
+    }
+  },
+  "security": {
+    "authentication": "required",
+    "authorization": "role-based",
+    "tenantIsolation": "strict",
+    "splitValidation": "comprehensive",
+    "amountValidation": "precise",
+    "auditLogging": "full",
+    "rateLimit": {
+      "requests": 50,
+      "window": "15m"
+    },
+    "encryptionAtRest": true,
+    "encryptionInTransit": true
+  },
+  "architecture": {
+    "pattern": "orchestrator",
+    "dataFlow": "event-driven",
+    "errorHandling": "circuit-breaker",
+    "auditLogging": "comprehensive",
+    "caching": "split-calculations",
+    "persistence": "transactional",
+    "notifications": "async"
+  },
+  "compliance": {
+    "pciDss": "token-based",
+    "gdpr": "data-minimal",
+    "sox": "audit-trail",
+    "antiMoneyLaundering": "transaction-monitoring",
+    "knowYourCustomer": "identity-verification"
+  },
+  "monitoring": {
+    "events": [
+      "split_payment.created",
+      "split_payment.completed",
+      "split_payment.failed", 
+      "installment.created",
+      "installment.payment_due",
+      "installment.payment_received",
+      "installment.payment_overdue",
+      "layaway.created",
+      "layaway.deposit_received",
+      "layaway.payment_received",
+      "layaway.completed",
+      "layaway.expired",
+      "multi_method.payment_initiated",
+      "multi_method.payment_completed",
+      "split.calculated",
+      "commission.calculated",
+      "reminder.sent",
+      "dispute.created",
+      "refund.processed"
+    ],
+    "metrics": [
+      "split_payment_volume",
+      "split_payment_success_rate",
+      "average_split_calculation_time",
+      "installment_completion_rate",
+      "layaway_completion_rate",
+      "multi_method_success_rate",
+      "commission_total",
+      "reminder_effectiveness",
+      "dispute_rate",
+      "refund_rate"
+    ]
+  },
+  "testing": {
+    "unitTests": "comprehensive",
+    "integrationTests": "payment-gateway",
+    "loadTests": "split-calculations",
+    "securityTests": "tenant-isolation",
+    "endToEndTests": "payment-flows"
+  }
+}
