@@ -1,0 +1,236 @@
+{
+  "id": "ecom_201_2_multi_store_marketplace",
+  "name": "MultiStoreMarketplace",
+  "sector": "ecommerce",
+  "version": "1.0.0",
+  "description": "Multi-store marketplace with separate vendor dashboards, individual store pages, and product mapping. Reuses existing partner dashboard and inventory components for maximum cellular efficiency.",
+  "channels": ["stable", "canary"],
+  "category": "ECOM-201.2",
+  "dependencies": ["ECOM-201.1", "CC-001.1", "admin/UserDetails", "inventory/ProductForm", "partner/Dashboard"],
+  "cellularArchitecture": {
+    "reusesExistingCells": ["partner-dashboard", "inventory-product-form", "user-details", "vendor-onboarding"],
+    "cellularPrinciple": "atomic_reusable_functional_unit",
+    "dataLayer": "database_with_redis_cache"
+  },
+  "inputs": {
+    "createVendorStore": {
+      "type": "object",
+      "properties": {
+        "vendorId": { "type": "string" },
+        "storeName": { "type": "string" },
+        "storeSlug": { "type": "string" },
+        "description": { "type": "string" },
+        "logo": { "type": "string" },
+        "banner": { "type": "string" },
+        "theme": {
+          "type": "object",
+          "properties": {
+            "primaryColor": { "type": "string" },
+            "secondaryColor": { "type": "string" },
+            "fontFamily": { "type": "string" },
+            "layout": { "type": "string", "enum": ["grid", "list", "masonry"] }
+          }
+        },
+        "settings": {
+          "type": "object",
+          "properties": {
+            "isActive": { "type": "boolean" },
+            "allowReviews": { "type": "boolean" },
+            "autoApproveProducts": { "type": "boolean" },
+            "shippingZones": { "type": "array", "items": { "type": "string" } },
+            "paymentMethods": { "type": "array", "items": { "type": "string" } }
+          }
+        }
+      },
+      "required": ["vendorId", "storeName", "storeSlug"]
+    },
+    "mapProductToVendor": {
+      "type": "object",
+      "properties": {
+        "vendorId": { "type": "string" },
+        "storeId": { "type": "string" },
+        "productId": { "type": "string" },
+        "vendorPrice": { "type": "number" },
+        "vendorSKU": { "type": "string" },
+        "stock": { "type": "number" },
+        "isActive": { "type": "boolean" },
+        "customizations": {
+          "type": "object",
+          "properties": {
+            "description": { "type": "string" },
+            "images": { "type": "array", "items": { "type": "string" } },
+            "variants": { "type": "array" }
+          }
+        }
+      },
+      "required": ["vendorId", "storeId", "productId", "vendorPrice"]
+    },
+    "getVendorDashboard": {
+      "type": "object",
+      "properties": {
+        "vendorId": { "type": "string" },
+        "dateRange": {
+          "type": "object",
+          "properties": {
+            "startDate": { "type": "string" },
+            "endDate": { "type": "string" }
+          }
+        }
+      },
+      "required": ["vendorId"]
+    },
+    "getStoreProducts": {
+      "type": "object",
+      "properties": {
+        "storeId": { "type": "string" },
+        "filters": {
+          "type": "object",
+          "properties": {
+            "category": { "type": "string" },
+            "minPrice": { "type": "number" },
+            "maxPrice": { "type": "number" },
+            "inStock": { "type": "boolean" },
+            "search": { "type": "string" }
+          }
+        },
+        "pagination": {
+          "type": "object",
+          "properties": {
+            "page": { "type": "number" },
+            "limit": { "type": "number" },
+            "sortBy": { "type": "string" },
+            "sortOrder": { "type": "string", "enum": ["asc", "desc"] }
+          }
+        }
+      },
+      "required": ["storeId"]
+    },
+    "manageStoreSettings": {
+      "type": "object",
+      "properties": {
+        "storeId": { "type": "string" },
+        "vendorId": { "type": "string" },
+        "updates": {
+          "type": "object",
+          "properties": {
+            "storeName": { "type": "string" },
+            "description": { "type": "string" },
+            "logo": { "type": "string" },
+            "banner": { "type": "string" },
+            "theme": { "type": "object" },
+            "settings": { "type": "object" }
+          }
+        }
+      },
+      "required": ["storeId", "vendorId", "updates"]
+    },
+    "getMarketplaceOverview": {
+      "type": "object",
+      "properties": {
+        "tenantId": { "type": "string" },
+        "filters": {
+          "type": "object",
+          "properties": {
+            "status": { "type": "string", "enum": ["active", "inactive", "pending"] },
+            "category": { "type": "string" },
+            "dateRange": { "type": "object" }
+          }
+        }
+      },
+      "required": ["tenantId"]
+    }
+  },
+  "outputs": {
+    "createVendorStore": {
+      "type": "object",
+      "properties": {
+        "success": { "type": "boolean" },
+        "storeId": { "type": "string" },
+        "storeUrl": { "type": "string" },
+        "message": { "type": "string" }
+      }
+    },
+    "mapProductToVendor": {
+      "type": "object",
+      "properties": {
+        "success": { "type": "boolean" },
+        "mappingId": { "type": "string" },
+        "message": { "type": "string" }
+      }
+    },
+    "getVendorDashboard": {
+      "type": "object",
+      "properties": {
+        "success": { "type": "boolean" },
+        "dashboard": {
+          "type": "object",
+          "properties": {
+            "store": { "type": "object" },
+            "metrics": { "type": "object" },
+            "products": { "type": "array" },
+            "orders": { "type": "array" },
+            "analytics": { "type": "object" }
+          }
+        },
+        "message": { "type": "string" }
+      }
+    },
+    "getStoreProducts": {
+      "type": "object",
+      "properties": {
+        "success": { "type": "boolean" },
+        "products": { "type": "array" },
+        "total": { "type": "number" },
+        "pagination": { "type": "object" },
+        "message": { "type": "string" }
+      }
+    },
+    "manageStoreSettings": {
+      "type": "object",
+      "properties": {
+        "success": { "type": "boolean" },
+        "store": { "type": "object" },
+        "message": { "type": "string" }
+      }
+    },
+    "getMarketplaceOverview": {
+      "type": "object",
+      "properties": {
+        "success": { "type": "boolean" },
+        "overview": {
+          "type": "object",
+          "properties": {
+            "totalStores": { "type": "number" },
+            "activeStores": { "type": "number" },
+            "totalProducts": { "type": "number" },
+            "topVendors": { "type": "array" },
+            "recentActivity": { "type": "array" }
+          }
+        },
+        "message": { "type": "string" }
+      }
+    }
+  },
+  "actions": [
+    "createVendorStore",
+    "mapProductToVendor",
+    "getVendorDashboard",
+    "getStoreProducts", 
+    "manageStoreSettings",
+    "getMarketplaceOverview"
+  ],
+  "security": {
+    "dataClassification": "internal",
+    "encryptionRequired": false,
+    "auditTrail": true,
+    "sensitiveFields": [],
+    "storagePolicy": "database_with_cache"
+  },
+  "compliance": {
+    "gdpr": true,
+    "dataRetention": "3_years",
+    "rightToErasure": true
+  },
+  "created": "2025-01-16T00:00:00Z",
+  "updated": "2025-01-16T00:00:00Z"
+}
