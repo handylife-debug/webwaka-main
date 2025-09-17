@@ -3194,6 +3194,200 @@ export const ALL_TAX_FEE_CONFIG_TRIGGERS_SQL = `
 `;
 
 // =============================================================================
+// WHOLESALE PRICING TIERS CONFIGURATION SYSTEM SCHEMA
+// =============================================================================
+
+/**
+ * Wholesale Default Configurations Table
+ * Configurable tenant-level defaults to replace hardcoded values like territory,
+ * currency, and payment terms in WholesalePricingTiers Cell
+ */
+export const WHOLESALE_DEFAULT_CONFIGURATIONS_TABLE_SQL = `
+  CREATE TABLE IF NOT EXISTS wholesale_default_configurations (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    tenant_id UUID NOT NULL,
+    default_territory VARCHAR(50) NOT NULL DEFAULT 'Lagos',
+    default_currency VARCHAR(3) NOT NULL DEFAULT 'NGN',
+    default_payment_terms VARCHAR(20) NOT NULL DEFAULT 'net_30',
+    territory_fallback_order JSONB DEFAULT '["Lagos", "Abuja", "Port-Harcourt"]'::jsonb,
+    currency_fallback_order JSONB DEFAULT '["NGN", "USD", "EUR"]'::jsonb,
+    business_rules JSONB DEFAULT '{}'::jsonb,
+    description TEXT DEFAULT 'Default wholesale pricing configurations',
+    is_active BOOLEAN DEFAULT TRUE,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    created_by UUID NOT NULL,
+    
+    -- Multi-tenant constraints
+    CONSTRAINT fk_wholesale_defaults_tenant FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
+    
+    -- Data integrity constraints
+    CONSTRAINT check_default_territory_format CHECK (default_territory ~ '^[A-Za-z][A-Za-z0-9\-\s]*$'),
+    CONSTRAINT check_default_currency_format CHECK (default_currency ~ '^[A-Z]{3}$'),
+    CONSTRAINT check_default_payment_terms_format CHECK (default_payment_terms ~ '^[a-z_0-9]+$'),
+    CONSTRAINT check_territory_fallback_array CHECK (jsonb_typeof(territory_fallback_order) = 'array'),
+    CONSTRAINT check_currency_fallback_array CHECK (jsonb_typeof(currency_fallback_order) = 'array'),
+    CONSTRAINT check_business_rules_object CHECK (jsonb_typeof(business_rules) = 'object'),
+    
+    -- Only one active configuration per tenant
+    CONSTRAINT unique_active_config_per_tenant UNIQUE (tenant_id) DEFERRABLE INITIALLY DEFERRED
+  );
+  
+  -- Indexes for performance
+  CREATE INDEX IF NOT EXISTS idx_wholesale_defaults_tenant_id ON wholesale_default_configurations(tenant_id);
+  CREATE INDEX IF NOT EXISTS idx_wholesale_defaults_active ON wholesale_default_configurations(tenant_id, is_active) WHERE is_active = TRUE;
+  CREATE INDEX IF NOT EXISTS idx_wholesale_defaults_territory ON wholesale_default_configurations(tenant_id, default_territory) WHERE is_active = TRUE;
+  CREATE INDEX IF NOT EXISTS idx_wholesale_defaults_currency ON wholesale_default_configurations(tenant_id, default_currency) WHERE is_active = TRUE;
+  
+  -- Trigger for automatic updated_at
+  CREATE TRIGGER trigger_update_wholesale_defaults_updated_at
+    BEFORE UPDATE ON wholesale_default_configurations
+    FOR EACH ROW
+    EXECUTE FUNCTION update_updated_at_column();
+`;
+
+/**
+ * Wholesale Payment Terms Configurations Table
+ * Configurable payment terms discount rates to replace hardcoded paymentDiscounts object
+ */
+export const WHOLESALE_PAYMENT_TERMS_CONFIGURATIONS_TABLE_SQL = `
+  CREATE TABLE IF NOT EXISTS wholesale_payment_terms_configurations (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    tenant_id UUID NOT NULL,
+    payment_terms_code VARCHAR(50) NOT NULL,
+    payment_terms_name VARCHAR(100) NOT NULL,
+    discount_rate DECIMAL(5,4) NOT NULL DEFAULT 0.0000,
+    days_to_payment INTEGER DEFAULT 30,
+    early_payment_bonus DECIMAL(5,4) DEFAULT 0.0000,
+    late_payment_penalty DECIMAL(5,4) DEFAULT 0.0000,
+    description TEXT,
+    business_rules JSONB DEFAULT '{}'::jsonb,
+    is_default BOOLEAN DEFAULT FALSE,
+    is_active BOOLEAN DEFAULT TRUE,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    created_by UUID NOT NULL,
+    
+    -- Multi-tenant constraints
+    CONSTRAINT fk_wholesale_payment_terms_tenant FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
+    
+    -- Unique constraints scoped by tenant
+    CONSTRAINT unique_payment_terms_code_per_tenant UNIQUE (tenant_id, payment_terms_code),
+    
+    -- Data integrity constraints
+    CONSTRAINT check_discount_rate_valid CHECK (discount_rate >= 0.0000 AND discount_rate <= 0.5000),
+    CONSTRAINT check_early_payment_bonus_valid CHECK (early_payment_bonus >= 0.0000 AND early_payment_bonus <= 0.2000),
+    CONSTRAINT check_late_payment_penalty_valid CHECK (late_payment_penalty >= 0.0000 AND late_payment_penalty <= 1.0000),
+    CONSTRAINT check_days_to_payment_positive CHECK (days_to_payment > 0 AND days_to_payment <= 365),
+    CONSTRAINT check_payment_terms_code_format CHECK (payment_terms_code ~ '^[a-z][a-z0-9_]*$'),
+    CONSTRAINT check_business_rules_object_payment CHECK (jsonb_typeof(business_rules) = 'object'),
+    CONSTRAINT check_only_one_default_per_tenant_payment 
+      EXCLUDE USING btree (tenant_id WITH =) WHERE (is_default = TRUE)
+  );
+  
+  -- Indexes for performance
+  CREATE INDEX IF NOT EXISTS idx_wholesale_payment_terms_tenant_code ON wholesale_payment_terms_configurations(tenant_id, payment_terms_code);
+  CREATE INDEX IF NOT EXISTS idx_wholesale_payment_terms_active ON wholesale_payment_terms_configurations(tenant_id, is_active) WHERE is_active = TRUE;
+  CREATE INDEX IF NOT EXISTS idx_wholesale_payment_terms_default ON wholesale_payment_terms_configurations(tenant_id, is_default) WHERE is_default = TRUE;
+  CREATE INDEX IF NOT EXISTS idx_wholesale_payment_terms_discount ON wholesale_payment_terms_configurations(tenant_id, discount_rate) WHERE is_active = TRUE;
+  
+  -- Trigger for automatic updated_at
+  CREATE TRIGGER trigger_update_wholesale_payment_terms_updated_at
+    BEFORE UPDATE ON wholesale_payment_terms_configurations
+    FOR EACH ROW
+    EXECUTE FUNCTION update_updated_at_column();
+`;
+
+/**
+ * Wholesale Regional Configurations Table
+ * Configurable regional adjustments and territory-specific settings to replace hardcoded territory logic
+ */
+export const WHOLESALE_REGIONAL_CONFIGURATIONS_TABLE_SQL = `
+  CREATE TABLE IF NOT EXISTS wholesale_regional_configurations (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    tenant_id UUID NOT NULL,
+    territory_code VARCHAR(50) NOT NULL,
+    territory_name VARCHAR(100) NOT NULL,
+    currency_code VARCHAR(3) NOT NULL DEFAULT 'NGN',
+    regional_adjustment_multiplier DECIMAL(6,4) NOT NULL DEFAULT 1.0000,
+    tax_rate DECIMAL(5,4) DEFAULT 0.0000,
+    default_payment_methods JSONB DEFAULT '["bank_transfer", "cash"]'::jsonb,
+    shipping_zones JSONB DEFAULT '[]'::jsonb,
+    business_hours JSONB DEFAULT '{"start": "08:00", "end": "18:00", "timezone": "Africa/Lagos"}'::jsonb,
+    regulatory_requirements JSONB DEFAULT '{}'::jsonb,
+    market_preferences JSONB DEFAULT '{}'::jsonb,
+    is_default BOOLEAN DEFAULT FALSE,
+    is_active BOOLEAN DEFAULT TRUE,
+    description TEXT,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    created_by UUID NOT NULL,
+    
+    -- Multi-tenant constraints
+    CONSTRAINT fk_wholesale_regional_tenant FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
+    
+    -- Unique constraints scoped by tenant
+    CONSTRAINT unique_territory_code_per_tenant UNIQUE (tenant_id, territory_code),
+    
+    -- Data integrity constraints
+    CONSTRAINT check_regional_adjustment_valid CHECK (regional_adjustment_multiplier >= 0.1000 AND regional_adjustment_multiplier <= 3.0000),
+    CONSTRAINT check_tax_rate_valid_regional CHECK (tax_rate >= 0.0000 AND tax_rate <= 1.0000),
+    CONSTRAINT check_currency_code_valid_regional CHECK (currency_code ~ '^[A-Z]{3}$'),
+    CONSTRAINT check_territory_code_format CHECK (territory_code ~ '^[A-Za-z][A-Za-z0-9\-\s]*$'),
+    CONSTRAINT check_payment_methods_array_regional CHECK (jsonb_typeof(default_payment_methods) = 'array'),
+    CONSTRAINT check_shipping_zones_array CHECK (jsonb_typeof(shipping_zones) = 'array'),
+    CONSTRAINT check_business_hours_object CHECK (jsonb_typeof(business_hours) = 'object'),
+    CONSTRAINT check_regulatory_requirements_object CHECK (jsonb_typeof(regulatory_requirements) = 'object'),
+    CONSTRAINT check_market_preferences_object CHECK (jsonb_typeof(market_preferences) = 'object'),
+    CONSTRAINT check_only_one_default_regional_per_tenant 
+      EXCLUDE USING btree (tenant_id WITH =) WHERE (is_default = TRUE)
+  );
+  
+  -- Indexes for performance
+  CREATE INDEX IF NOT EXISTS idx_wholesale_regional_tenant_territory ON wholesale_regional_configurations(tenant_id, territory_code);
+  CREATE INDEX IF NOT EXISTS idx_wholesale_regional_active ON wholesale_regional_configurations(tenant_id, is_active) WHERE is_active = TRUE;
+  CREATE INDEX IF NOT EXISTS idx_wholesale_regional_default ON wholesale_regional_configurations(tenant_id, is_default) WHERE is_default = TRUE;
+  CREATE INDEX IF NOT EXISTS idx_wholesale_regional_currency ON wholesale_regional_configurations(tenant_id, currency_code) WHERE is_active = TRUE;
+  CREATE INDEX IF NOT EXISTS idx_wholesale_regional_adjustment ON wholesale_regional_configurations(tenant_id, regional_adjustment_multiplier) WHERE is_active = TRUE;
+  
+  -- Trigger for automatic updated_at
+  CREATE TRIGGER trigger_update_wholesale_regional_updated_at
+    BEFORE UPDATE ON wholesale_regional_configurations
+    FOR EACH ROW
+    EXECUTE FUNCTION update_updated_at_column();
+`;
+
+/**
+ * Combined Wholesale Configuration Tables SQL
+ * Creates all tables, indexes, and triggers in the correct order
+ */
+export const ALL_WHOLESALE_CONFIG_TABLES_SQL = `
+  ${WHOLESALE_DEFAULT_CONFIGURATIONS_TABLE_SQL}
+  ${WHOLESALE_PAYMENT_TERMS_CONFIGURATIONS_TABLE_SQL}
+  ${WHOLESALE_REGIONAL_CONFIGURATIONS_TABLE_SQL}
+`;
+
+/**
+ * Wholesale Configuration Indexes SQL
+ * All indexes for optimal query performance
+ */
+export const ALL_WHOLESALE_CONFIG_INDEXES_SQL = `
+  -- Wholesale default configurations indexes (already included in table creation)
+  -- Wholesale payment terms configurations indexes (already included in table creation)
+  -- Wholesale regional configurations indexes (already included in table creation)
+`;
+
+/**
+ * Wholesale Configuration Triggers SQL
+ * All triggers for automatic timestamp updates
+ */
+export const ALL_WHOLESALE_CONFIG_TRIGGERS_SQL = `
+  -- Wholesale default configurations triggers (already included in table creation)
+  -- Wholesale payment terms configurations triggers (already included in table creation)
+  -- Wholesale regional configurations triggers (already included in table creation)
+`;
+
+// =============================================================================
 // QUOTE REQUEST NEGOTIATION CONFIGURATION SYSTEM SCHEMA
 // =============================================================================
 
