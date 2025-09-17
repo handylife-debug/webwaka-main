@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { paymentGatewayCoreCell } from '@/cells/payment/PaymentGatewayCore/src/server';
-import { withAuth } from '@/lib/auth-middleware';
-import { getTenantContext, validateTenantAccess } from '@/lib/tenant-context';
+import { cellBus } from '@/cell-sdk/loader/cell-bus';
 import { z } from 'zod';
 
 // Rate limiting store (in production, use Redis)
@@ -73,19 +72,62 @@ async function auditLog({
   console.log(`🔍 AUDIT: ${status.toUpperCase()} - ${action} by user ${userId} for tenant ${tenantId}`, auditEntry);
 }
 
-// Secure POST handler with authentication, authorization, and rate limiting
-const securePostHandler = withAuth(async (request: NextRequest, context: { user: any }) => {
+// Secure POST handler with Cell Gateway v2 authentication, authorization, and rate limiting
+async function securePostHandler(request: NextRequest) {
   const startTime = Date.now();
-  let tenantContext;
+  let tenantContext: any;
   let auditDetails = {};
+  let context: { user: any } = { user: { id: 'unknown' } };
   
   try {
-    // Get tenant context (CRITICAL: derive from request, never trust payload)
-    tenantContext = await getTenantContext(request);
+    // Authenticate request using Cell Gateway v2
+    const authResult = await cellBus.call('auth/AuthenticationCore', 'authenticateRequest', {
+      request: {
+        headers: Object.fromEntries(request.headers.entries()),
+        url: request.url,
+        method: request.method
+      },
+      requiredRole: 'User'
+    });
+
+    if (!authResult.success) {
+      return NextResponse.json({
+        success: false,
+        message: 'Authentication required',
+        code: 'AUTHENTICATION_REQUIRED'
+      }, { status: 401 });
+    }
+
+    context = { user: authResult.user };
+
+    // Get tenant context using Cell Gateway v2 (CRITICAL: derive from request, never trust payload)
+    const tenantResult = await cellBus.call('auth/AuthenticationCore', 'getTenantContext', {
+      request: {
+        headers: Object.fromEntries(request.headers.entries()),
+        url: request.url
+      }
+    });
+
+    if (!tenantResult.success) {
+      return NextResponse.json({
+        success: false,
+        message: 'Tenant context required',
+        code: 'TENANT_CONTEXT_REQUIRED'
+      }, { status: 400 });
+    }
+
+    tenantContext = tenantResult.tenantContext;
     
-    // Validate tenant access for authenticated user
-    const hasAccess = await validateTenantAccess(tenantContext.tenantId, request);
-    if (!hasAccess) {
+    // Validate tenant access for authenticated user using Cell Gateway v2
+    const accessResult = await cellBus.call('auth/AuthenticationCore', 'validateTenantAccess', {
+      tenantId: tenantContext.tenantId,
+      userId: context.user.id,
+      request: {
+        headers: Object.fromEntries(request.headers.entries())
+      }
+    });
+    
+    if (!accessResult.success) {
       await auditLog({
         userId: context.user.id,
         tenantId: tenantContext.tenantId,
@@ -185,7 +227,10 @@ const securePostHandler = withAuth(async (request: NextRequest, context: { user:
             message: 'Reference and provider are required for payment verification'
           }, { status: 400 });
         }
-        result = await paymentGatewayCoreCell.verifyPayment(enhancedPayload);
+        result = await paymentGatewayCoreCell.verifyPayment({
+          reference: payload.reference,
+          provider: payload.provider
+        });
         break;
         
       case 'createCustomer':
@@ -225,7 +270,10 @@ const securePostHandler = withAuth(async (request: NextRequest, context: { user:
             message: 'Transaction ID and provider are required for payment status'
           }, { status: 400 });
         }
-        result = await paymentGatewayCoreCell.getPaymentStatus(enhancedPayload);
+        result = await paymentGatewayCoreCell.getPaymentStatus({
+          transactionId: payload.transactionId,
+          provider: payload.provider
+        });
         break;
         
       case 'validateWebhook':
@@ -235,7 +283,11 @@ const securePostHandler = withAuth(async (request: NextRequest, context: { user:
             message: 'Body, signature, and provider are required for webhook validation'
           }, { status: 400 });
         }
-        result = await paymentGatewayCoreCell.validateWebhook(enhancedPayload);
+        result = await paymentGatewayCoreCell.validateWebhook({
+          body: payload.body,
+          signature: payload.signature,
+          provider: payload.provider
+        });
         break;
 
       // Additional helper actions for the UI
@@ -404,7 +456,7 @@ const securePostHandler = withAuth(async (request: NextRequest, context: { user:
       error: process.env.NODE_ENV === 'development' ? errorDetails : 'Internal server error'
     }, { status: 500 });
   }
-}, { requiredRole: 'User' }); // Minimum role required for payment operations
+}
 
 export async function POST(request: NextRequest) {
   return securePostHandler(request);
